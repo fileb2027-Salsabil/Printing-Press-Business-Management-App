@@ -1,0 +1,170 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Hind Siliguri', 'Noto Sans Bengali', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Clear, distinct, legible numbers in both Bengali and English digits */
+  input[type="number"],
+  .tabular-nums,
+  table td,
+  table th,
+  .font-mono,
+  .numeral-clear {
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1, "kern" 1;
+    letter-spacing: 0.015em;
+  }
+}
+
+.font-noto {
+  font-family: 'Noto Sans Bengali', sans-serif;
+}
+
+.font-hind {
+  font-family: 'Hind Siliguri', sans-serif;
+}
+
+.font-tiro {
+  font-family: 'Tiro Bangla', serif;
+}
+
+/* Ensure all modal dialog backdrops allow mouse wheel scrolling up and down */
+@media screen {
+  div[class*="fixed inset-0"][class*="z-50"],
+  div[class*="fixed inset-0"][class*="z-40"],
+  div[class*="fixed inset-0"][class*="z-9999"],
+  .modal-scroll-overlay {
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Print specific styles - Optimized for single-page printing */
+@media print {
+  html, body, #root, main, .overflow-y-auto, .overflow-hidden, .flex-1 {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    background-color: white !important;
+    color: black !important;
+  }
+
+  body {
+    font-size: 10pt;
+    line-height: 1.28;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .no-print, header, aside, nav, button:not(.printable-button) {
+    display: none !important;
+  }
+
+  .fixed {
+    position: static !important;
+  }
+
+  .backdrop-blur-xs, .backdrop-blur-sm, [class*="bg-slate-900/"] {
+    background: transparent !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-container {
+    padding: 0 !important;
+    margin: 0 auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Compact margins and padding for single page fit */
+  .print-container .my-6,
+  .print-area .my-6 {
+    margin-top: 10px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .print-container .p-8,
+  .print-container .p-6,
+  .print-area .p-6 {
+    padding: 6px !important;
+  }
+
+  .print-container .space-y-6 > * + *,
+  .print-area .space-y-6 > * + * {
+    margin-top: 10px !important;
+  }
+
+  table {
+    page-break-inside: auto;
+    width: 100% !important;
+  }
+
+  table th, table td {
+    padding: 4px 6px !important;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Signatures section styling to prevent spilling onto page 2 */
+  .print-signatures {
+    margin-top: 16px !important;
+    padding-top: 8px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Slips styling */
+  .receipt-slip {
+    border: 1px solid #334155 !important;
+    padding: 12px !important;
+    margin: 0 auto 12px auto !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  @page {
+    margin: 6mm 8mm;
+    size: auto;
+  }
+}
+
+@media screen {
+  .print-only {
+    display: none !important;
+  }
+
+  .print-rendered-content .no-print,
+  .print-rendered-content button:not(.printable-button) {
+    display: none !important;
+  }
+
+  .print-rendered-content .print-only {
+    display: block !important;
+  }
+}

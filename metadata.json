@@ -1,0 +1,6 @@
+{
+  "name": "মক্কা প্রিন্টার্স - Business Management & Accounting",
+  "description": "মক্কা প্রিন্টার্সের সম্পূর্ণ হিসাব, দৈনিক প্রডাকশন, কাস্টমার খাতা, বিল, কালেকশন, কর্মচারী হাজিরা ও বেতন, ওভারটাইম, কাগজ কাটিং, পট্টি বিক্রি এবং রিপোর্ট ম্যানেজমেন্ট সফটওয়্যার।",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

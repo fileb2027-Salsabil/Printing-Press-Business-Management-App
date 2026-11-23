@@ -1,0 +1,65 @@
+{
+  "entities": {
+    "BusinessDatabase": {
+      "title": "BusinessDatabase",
+      "description": "Synced business database state across mobile and computer devices",
+      "type": "object",
+      "properties": {
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "UID or email of the user who updated"
+        },
+        "data": {
+          "type": "string",
+          "description": "Compressed or serialized JSON of business state"
+        },
+        "partyAccounts": {
+          "type": "array",
+          "description": "Optional customer party portal accounts stored on saas_platform_registry"
+        }
+      },
+      "required": ["updatedAt"]
+    },
+    "BusinessChunk": {
+      "title": "BusinessChunk",
+      "description": "Chunked slice of synchronized business state to prevent exceeding the 1MB document limit",
+      "type": "object",
+      "properties": {
+        "index": { "type": "number" },
+        "content": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["index", "content"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile document",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    }
+  },
+  "firestore": {
+    "/businesses/{businessId}": {
+      "schema": "BusinessDatabase",
+      "description": "Stores synchronized press accounting state for Makkah Printers"
+    },
+    "/businesses/{businessId}/chunks/{chunkId}": {
+      "schema": "BusinessChunk",
+      "description": "Stores individual payload chunks"
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User account information"
+    }
+  }
+}
