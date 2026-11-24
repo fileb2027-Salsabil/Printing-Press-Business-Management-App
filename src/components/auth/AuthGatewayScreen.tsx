@@ -62,10 +62,30 @@ export const AuthGatewayScreen: React.FC = () => {
 
   const handleGoogleSignIn = async () => {
     if (googleLoading) return;
-    setGoogleLoading(true);
     setError('');
+    setSuccessMsg('');
+
+    if (mode === 'signup' && signupType === 'business' && !businessName.trim()) {
+      setError(
+        'গুগল দিয়ে নতুন প্রেস নিবন্ধন করতে নিচের "প্রেস / ব্যবসা প্রতিষ্ঠানের নাম" ঘরটি পূরণ করুন, তারপর গুগল বাটনে ক্লিক করুন (আগে থেকেই অ্যাকাউন্ট থাকলে "লগইন" ট্যাবে ক্লিক করুন)।'
+      );
+      return;
+    }
+
+    setGoogleLoading(true);
     try {
-      const res = await loginWithGoogle();
+      const res = await loginWithGoogle(
+        mode === 'signup' && signupType === 'business'
+          ? {
+              registerNewBusiness: true,
+              businessName: businessName.trim(),
+              phone: businessPhone.trim(),
+              address: businessAddress.trim(),
+              planType: 'trial',
+              shopPassword: shopPassword.trim(),
+            }
+          : undefined
+      );
       if (!res.success && res.error && !res.error.includes('বাতিল')) {
         setError(res.error);
       }
@@ -190,7 +210,7 @@ export const AuthGatewayScreen: React.FC = () => {
         if (res.success) {
           setSuccessMsg(
             signupType === 'business'
-              ? `অ্যাকাউন্ট ও "${businessName.trim()}" নিবন্ধন সফল হয়েছে! মেইন অ্যাডমিনের অনুমোদনের পর ${defaultTrialDays} দিনের ফ্রি ট্রায়াল চালু হবে।`
+              ? `অ্যাকাউন্ট ও "${businessName.trim()}" নিবন্ধন সফল হয়েছে! ${defaultTrialDays} দিনের ফ্রি ট্রায়াল চালু হয়েছে।`
               : 'অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে! অ্যাডমিন অনুমোদনের পর নির্ধারিত মডিউলসমূহ উন্মুক্ত হবে।'
           );
         } else {

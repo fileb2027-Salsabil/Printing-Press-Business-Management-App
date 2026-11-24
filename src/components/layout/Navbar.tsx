@@ -5,7 +5,6 @@ import {
   Menu,
   Globe,
   Printer,
-  ShieldCheck,
   LogIn,
   LogOut,
   RefreshCw,
@@ -22,7 +21,6 @@ import {
   FileDown,
 } from 'lucide-react';
 import { triggerPrint } from '../common/PrintHeader';
-import { PWAInstallButton } from '../common/PWAInstallButton';
 import { AuthModal } from '../auth/AuthModal';
 import { AdminPasswordModal } from '../auth/AdminPasswordModal';
 import { BusinessSwitcherModal } from '../saas/BusinessSwitcherModal';
@@ -66,16 +64,19 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, activeTab: _act
     updateSettings({ language: lang === 'bn' ? 'en' : 'bn' });
   };
 
-  const activePressName = lang === 'bn' ? db.settings.name : db.settings.nameEn;
+  const activePressName =
+    (lang === 'bn' ? db.settings.name : db.settings.nameEn)?.trim() ||
+    currentBusiness?.name ||
+    'Press Management';
 
   return (
     <header className="no-print bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
-        {/* Left: Mobile Menu & Logo */}
-        <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 h-14 sm:h-15 flex items-center justify-between gap-1.5 sm:gap-2">
+        {/* Left: Mobile Menu, Clear Press Name & Compact Switcher */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 flex-1">
           <button
             onClick={onToggleSidebar}
-            className="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 lg:hidden shrink-0"
+            className="p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 lg:hidden shrink-0"
             aria-label="Toggle Navigation"
           >
             <Menu className="w-5 h-5" />
@@ -83,58 +84,56 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, activeTab: _act
 
           <div
             onClick={() => onNavigate('dashboard')}
-            className="flex items-center space-x-2.5 cursor-pointer group min-w-0"
+            className="flex items-center gap-2 cursor-pointer group min-w-0"
           >
             {db.settings.logoUrl ? (
               <img
                 src={db.settings.logoUrl}
-                alt={db.settings.name}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg object-contain border border-slate-200 shrink-0"
+                alt={activePressName}
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg object-contain border border-slate-200 shrink-0"
               />
             ) : (
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-emerald-700 text-white flex items-center justify-center font-black text-lg sm:text-xl shadow-xs group-hover:bg-emerald-800 transition shrink-0">
-                {(activePressName || 'P')[0]}
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-emerald-700 text-white flex items-center justify-center font-black text-base sm:text-lg shadow-xs group-hover:bg-emerald-800 transition shrink-0">
+                {activePressName[0]}
               </div>
             )}
             <div className="min-w-0">
-              <div className="flex items-center space-x-2">
-                <span className="font-extrabold text-sm sm:text-lg text-slate-900 tracking-tight truncate max-w-[140px] sm:max-w-[220px]">
-                  {activePressName}
-                </span>
-                <span className="hidden xl:inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0">
-                  Press Management
-                </span>
-              </div>
-              <p className="text-[10px] sm:text-[11px] text-slate-500 hidden md:block truncate">
+              <h1
+                className="font-extrabold text-sm sm:text-base md:text-lg text-slate-900 tracking-tight leading-tight truncate max-w-[160px] sm:max-w-[260px] md:max-w-sm lg:max-w-md"
+                title={activePressName}
+              >
+                {activePressName}
+              </h1>
+              <p className="text-[10px] text-slate-500 hidden md:block truncate leading-tight">
                 Press Business Management & Accounting • Designed by MD. Salsabil
               </p>
             </div>
           </div>
 
-          {/* Multi-Business Switcher Pill */}
+          {/* Multi-Business Switcher Compact Button */}
           {currentUser && (
             <button
               onClick={() => setIsBizSwitcherOpen(true)}
-              className="hidden sm:inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-100 hover:bg-emerald-50 border border-slate-300 hover:border-emerald-300 text-slate-700 hover:text-emerald-800 transition shrink-0"
+              className="hidden sm:inline-flex items-center gap-1 h-7 px-2 rounded-md text-[11px] font-bold bg-slate-100 hover:bg-emerald-50 border border-slate-300 hover:border-emerald-300 text-slate-700 hover:text-emerald-800 transition shrink-0"
               title="ব্যবসা প্রতিষ্ঠান পরিবর্তন করুন বা নতুন প্রতিষ্ঠান যোগ করুন"
             >
-              <Store className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span className="hidden lg:inline max-w-[120px] truncate">
+              <Store className="w-3 h-3 text-emerald-600 shrink-0" />
+              <span className="hidden xl:inline max-w-[110px] truncate">
                 {currentBusiness?.name || activePressName}
               </span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
             </button>
           )}
         </div>
 
-        {/* Right: Actions */}
-        <div className="flex items-center space-x-1.5 sm:space-x-2.5 shrink-0">
-          {/* Subscription / Trial Status Pill (Clickable to open Packages & Payment) */}
+        {/* Right: Compact Responsive Action Buttons */}
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          {/* Subscription / Trial Status Badge */}
           {currentUser && currentBusiness && !isMainAdmin && (
             <button
               type="button"
               onClick={() => onNavigate('subscription')}
-              className={`hidden xl:flex items-center space-x-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer hover:opacity-90 ${
+              className={`hidden xl:inline-flex items-center gap-1 h-7 px-2 rounded-md text-[10px] font-bold border transition cursor-pointer hover:opacity-90 ${
                 subscriptionInfo.isExpired
                   ? 'bg-rose-50 border-rose-300 text-rose-800'
                   : subscriptionInfo.isTrial
@@ -143,13 +142,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, activeTab: _act
               }`}
               title={`প্ল্যান: ${subscriptionInfo.planLabel} — প্যাকেজ নবায়ন ও পেমেন্ট করতে ক্লিক করুন`}
             >
-              <Clock className="w-3.5 h-3.5 shrink-0" />
+              <Clock className="w-3 h-3 shrink-0" />
               <span>
                 {subscriptionInfo.isExpired
-                  ? 'মেয়াদ শেষ 🔒 (নবায়ন)'
+                  ? 'মেয়াদ শেষ'
                   : subscriptionInfo.isLifetime
-                  ? 'আজীবন সক্রিয়'
-                  : `${subscriptionInfo.isTrial ? 'ফ্রি ট্রায়াল' : 'প্যাকেজ'}: ${subscriptionInfo.daysRemaining} দিন`}
+                  ? 'আজীবন'
+                  : `${subscriptionInfo.daysRemaining} দিন`}
               </span>
             </button>
           )}
@@ -157,35 +156,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, activeTab: _act
           {/* Read-Only Status Indicator */}
           {isReadOnly && (
             <div
-              className="hidden lg:flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 border border-amber-300 text-amber-900"
-              title="আপনি শুধুমাত্র প্রদর্শন মোডে (Read-Only) আছেন। সমস্ত সার্চ ও খাতা দেখতে পারবেন, কিন্তু কোনো পরিবর্তন করতে পারবেন না।"
+              className="hidden lg:inline-flex items-center gap-1 h-7 px-2 rounded-md text-[10px] font-bold bg-amber-50 border border-amber-300 text-amber-900"
+              title="আপনি শুধুমাত্র প্রদর্শন মোডে (Read-Only) আছেন।"
             >
-              <Eye className="w-3.5 h-3.5 text-amber-600" />
-              <span>শুধু প্রদর্শন (Read-Only)</span>
+              <Eye className="w-3 h-3 text-amber-600" />
+              <span>Read-Only</span>
             </div>
-          )}
-
-          {/* Admin Panel Quick Status / Lock Toggle */}
-          {isAdminPanelUnlocked ? (
-            <button
-              onClick={lockAdminPanel}
-              className="hidden sm:inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 hover:bg-rose-50 border border-emerald-300 hover:border-rose-300 text-emerald-800 hover:text-rose-700 transition group"
-              title="এডমিন প্যানেল আনলকড আছে। লক করতে ক্লিক করুন।"
-            >
-              <Unlock className="w-3.5 h-3.5 text-emerald-600 group-hover:hidden" />
-              <Lock className="w-3.5 h-3.5 text-rose-600 hidden group-hover:inline" />
-              <span className="group-hover:hidden">এডমিন আনলকড</span>
-              <span className="hidden group-hover:inline">এডমিন লক করুন</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => setIsAdminModalOpen(true)}
-              className="hidden sm:inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-100 hover:bg-amber-50 border border-slate-300 hover:border-amber-300 text-slate-700 hover:text-amber-900 transition"
-              title="এডমিন প্যানেল (সেটিংস, ডাটা ম্যানেজমেন্ট ও ইউজার এক্সেস) আনলক করতে পাসওয়ার্ড দিন"
-            >
-              <Lock className="w-3.5 h-3.5 text-slate-500" />
-              <span>এডমিন প্যানেল</span>
-            </button>
           )}
 
           {/* Account Menu & Device Sync */}
@@ -193,7 +169,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, activeTab: _act
             <div className="relative">
               <button
                 onClick={() => setIsAuthMenuOpen(!isAuthMenuOpen)}
-                className={`flex items-center space-x-1.5 p-1 sm:px-2.5 sm:py-1.5 rounded-lg text-xs font-bold transition ${
+                className={`flex items-center gap-1 h-7 sm:h-8 px-1.5 sm:px-2 rounded-md text-[11px] font-bold transition ${
                   cloudSyncStatus === 'quota_exceeded'
                     ? 'bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900'
                     : 'bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-900'
@@ -208,20 +184,20 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, activeTab: _act
                   <img
                     src={currentUser.photoURL}
                     alt={currentUser.displayName || 'User'}
-                    className="w-5 h-5 rounded-full object-cover border border-emerald-400"
+                    className="w-4 h-4 sm:w-5 sm:h-5 rounded-full object-cover border border-emerald-400 shrink-0"
                   />
                 ) : (
-                  <div className="w-5 h-5 rounded-full bg-emerald-700 text-white flex items-center justify-center text-[10px]">
+                  <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-emerald-700 text-white flex items-center justify-center text-[9px] shrink-0">
                     {(currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()}
                   </div>
                 )}
-                <span className="hidden md:inline max-w-[100px] truncate">
+                <span className="hidden md:inline max-w-[85px] truncate">
                   {currentUser.displayName || currentUser.email}
                 </span>
                 {cloudSyncStatus === 'quota_exceeded' ? (
-                  <span className="w-2 h-2 rounded-full bg-amber-500" title="লোকাল মোড (কোটা পূর্ণ)" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" title="লোকাল মোড" />
                 ) : (
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="সিঙ্ক সক্রিয়" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" title="সিঙ্ক সক্রিয়" />
                 )}
               </button>
 
@@ -348,48 +324,33 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, activeTab: _act
           ) : (
             <button
               onClick={() => setIsAuthModalOpen(true)}
-              className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-xs font-bold flex items-center space-x-1.5 shadow-sm transition active:scale-95"
+              className="h-7 sm:h-8 px-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-md text-[11px] font-bold flex items-center gap-1 shadow-xs transition active:scale-95"
               title="গুগল বা ইউজারনেম/পাসওয়ার্ড দিয়ে লগইন ও সাইন আপ করুন"
             >
               <LogIn className="w-3.5 h-3.5" />
-              <span>লগইন / সাইন আপ</span>
+              <span>লগইন</span>
             </button>
           )}
-
-          {/* PWA App Install Button */}
-          <PWAInstallButton variant="header" />
 
           {/* Print Quick Button */}
           <button
             onClick={() => triggerPrint()}
             title={t.print}
-            className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg flex items-center space-x-1.5 text-xs font-semibold"
+            className="h-7 sm:h-8 px-1.5 sm:px-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 rounded-md flex items-center gap-1 text-[11px] font-semibold transition"
           >
-            <Printer className="w-4 h-4" />
-            <span className="hidden md:inline">{t.print}</span>
+            <Printer className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden lg:inline">{t.print}</span>
           </button>
 
           {/* Custom PDF Quick Button */}
           <button
             onClick={() => triggerPrint(null, document.title, { mode: 'pdf' })}
             title="বর্তমান পেজের কাস্টম PDF তৈরি ও ডাউনলোড করুন"
-            className="px-2.5 py-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg flex items-center space-x-1 text-xs font-bold transition"
+            className="h-7 sm:h-8 px-1.5 sm:px-2 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-md flex items-center gap-1 text-[11px] font-bold transition"
           >
-            <FileDown className="w-3.5 h-3.5" />
+            <FileDown className="w-3.5 h-3.5 shrink-0" />
             <span className="hidden sm:inline">PDF</span>
           </button>
-
-          {/* Automated Tests shortcut (Main Admin Only) */}
-          {isMainAdmin && (
-            <button
-              onClick={() => onNavigate('tests')}
-              title="System Tests"
-              className="px-2.5 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg flex items-center space-x-1"
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{t.navTests}</span>
-            </button>
-          )}
 
           {/* Quick Number Format Switcher (সহজ বাংলা ১২৩ / ইংরেজি 123) */}
           <button
@@ -397,24 +358,22 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, activeTab: _act
               const current = db.settings.numberFormat || 'bn';
               updateSettings({ numberFormat: current === 'bn' ? 'en' : 'bn' });
             }}
-            title="সংখ্যা প্রদর্শন পদ্ধতি পরিবর্তন (সহজ বাংলা সংখ্যা / ইংরেজি সংখ্যা)"
-            className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center space-x-1 transition tabular-nums"
+            title="সংখ্যা প্রদর্শন পদ্ধতি পরিবর্তন (বাংলা ১২৩ / ইংরেজি 123)"
+            className="h-7 sm:h-8 px-1.5 sm:px-2 border border-slate-300 rounded-md text-[11px] font-bold text-slate-700 hover:bg-slate-100 flex items-center gap-0.5 transition tabular-nums"
           >
-            <span className="text-emerald-700 font-black text-[13px]">
+            <span className="text-emerald-700 font-black">
               {(db.settings.numberFormat || 'bn') === 'bn' ? '১২৩' : '123'}
-            </span>
-            <span className="hidden sm:inline text-[10px] text-slate-500 font-semibold">
-              {(db.settings.numberFormat || 'bn') === 'bn' ? 'বাংলা' : 'Eng'}
             </span>
           </button>
 
           {/* Language Switcher */}
           <button
             onClick={toggleLanguage}
-            className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center space-x-1.5 transition"
+            title={lang === 'bn' ? 'Switch to English' : 'বাংলায় পরিবর্তন করুন'}
+            className="h-7 sm:h-8 px-1.5 sm:px-2 border border-slate-300 rounded-md text-[11px] font-bold text-slate-700 hover:bg-slate-100 flex items-center gap-1 transition"
           >
-            <Globe className="w-3.5 h-3.5 text-emerald-600" />
-            <span>{lang === 'bn' ? 'English' : 'বাংলা'}</span>
+            <Globe className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span>{lang === 'bn' ? 'EN' : 'বাং'}</span>
           </button>
         </div>
       </div>
@@ -440,3 +399,4 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, activeTab: _act
     </header>
   );
 };
+

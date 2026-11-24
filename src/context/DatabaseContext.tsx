@@ -5,6 +5,8 @@ import {
   googleProvider,
   getSecondaryAuth,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,
@@ -27,6 +29,7 @@ import {
   createDefaultSaaSRegistry,
   pushDatabaseToCloud,
   fetchDatabaseFromCloud,
+  fetchSaaSRegistryOnce,
   resetQuotaExhaustedState,
   isCloudQuotaExhausted,
   markCloudQuotaExhausted,
@@ -34,6 +37,7 @@ import {
   pushSaaSRegistryToCloud,
   isLastPushedRegistryTimestamp,
   initializeNewBusinessDatabaseInCloud,
+  clearCloudSyncSessionCache,
 } from '../utils/cloudSync';
 import {
   DatabaseState,
@@ -268,7 +272,16 @@ interface DatabaseContextType {
   storageStats: { usageMB: number; quotaMB: number; percent: number; isPersistent: boolean };
   // Cloud Auth & Sync across Mobile and Computer (Firebase)
   currentUser: User | null;
-  loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
+  authResolved: boolean;
+  isCloudHydrating: boolean;
+  loginWithGoogle: (businessReg?: {
+    registerNewBusiness?: boolean;
+    businessName?: string;
+    phone?: string;
+    address?: string;
+    planType?: SubscriptionPlanType;
+    shopPassword?: string;
+  }) => Promise<{ success: boolean; error?: string }>;
   loginWithEmailOrUsername: (identifier: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signupWithEmailOrUsername: (
     identifier: string,
@@ -413,6 +426,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Cloud Auth & Sync States for Mobile & PC
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authResolved, setAuthResolved] = useState(false);
+  const [isRegistrySyncing, setIsRegistrySyncing] = useState(false);
+  const [isCloudDataSyncing, setIsCloudDataSyncing] = useState(false);
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(() => isCloudQuotaExhausted());
   const [cloudSyncStatus, setCloudSyncStatus] = useState<
     'synced' | 'syncing' | 'offline' | 'unauthenticated' | 'quota_exceeded'
@@ -468,13 +484,22 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const MAIN_SUPER_ADMIN_EMAIL = 'fileb2027@gmail.com';
 
-  // Load from persistent storage (IndexedDB first, fallback to localStorage) whenever activeBusinessId changes
+  // Load from persistent storage (IndexedDB first, fallback to localStorage) whenever activeBusinessId or logged-in user changes
   useEffect(() => {
     let cancelled = false;
     hasLoadedCloudOnce.current = false;
     isRemoteCloudUpdate.current = false;
 
     async function initDB() {
+      if (!currentUser) {
+        loadedBusinessIdRef.current = null;
+        if (!cancelled) {
+          setDb(initialEmptyState);
+          setIsReady(true);
+        }
+        return;
+      }
+
       try {
         await requestPersistentStorage();
 
@@ -606,11 +631,11 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return () => {
       cancelled = true;
     };
-  }, [activeBusinessId]);
+  }, [activeBusinessId, currentUser?.uid]);
 
-  // Dual Persistence: Save to both IndexedDB (unlimited) and localStorage (fast fallback)
+  // Dual Persistence: Save to both IndexedDB (unlimited) and localStorage (fast fallback) ONLY while authenticated and hydrated
   useEffect(() => {
-    if (!isReady || loadedBusinessIdRef.current !== activeBusinessId) return;
+    if (!currentUser || !isReady || loadedBusinessIdRef.current !== activeBusinessId) return;
 
     saveToIndexedDB(db, activeBusinessId).catch((err) => console.error('IndexedDB save error', err));
 
@@ -619,7 +644,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } catch (e) {
       console.warn('LocalStorage quota reached (safe: data is preserved in IndexedDB)', e);
     }
-  }, [db, isReady, activeBusinessId]);
+  }, [db, currentUser?.uid, isReady, activeBusinessId]);
 
   // Periodic Auto-Snapshot (debounced 30s after changes)
   useEffect(() => {
@@ -649,18 +674,23 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       const nextUid = user?.uid || null;
-      if (prevAuthUidRef.current && prevAuthUidRef.current !== nextUid) {
-        setIsAdminPanelUnlocked(false);
-        setUnlockedBusinessIds([]);
-        if (typeof window !== 'undefined') {
-          sessionStorage.removeItem('makkah_admin_panel_unlocked');
-          sessionStorage.removeItem(`press_unlocked_shops_${prevAuthUidRef.current}`);
+      if (prevAuthUidRef.current !== nextUid) {
+        clearCloudSyncSessionCache();
+        if (prevAuthUidRef.current) {
+          setIsAdminPanelUnlocked(false);
+          setUnlockedBusinessIds([]);
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('makkah_admin_panel_unlocked');
+            sessionStorage.removeItem(`press_unlocked_shops_${prevAuthUidRef.current}`);
+          }
         }
       }
       prevAuthUidRef.current = nextUid;
       setCurrentUser(user);
+      setAuthResolved(true);
 
       if (user) {
+        setIsRegistrySyncing(true);
         try {
           const savedUnlocked = sessionStorage.getItem(`press_unlocked_shops_${user.uid}`);
           setUnlockedBusinessIds(savedUnlocked ? JSON.parse(savedUnlocked) : []);
@@ -669,6 +699,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       } else {
         setUnlockedBusinessIds([]);
+        setIsRegistrySyncing(false);
+        setIsCloudDataSyncing(false);
       }
 
       if (!user) {
@@ -692,11 +724,60 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [saasRegistry]);
 
-  // Real-time Firestore Sync for Master SaaS Business Registry
+  // Real-time Firestore Sync for Master SaaS Business Registry (Reads always run even if daily write quota was hit)
   useEffect(() => {
-    if (!currentUser || isQuotaExceeded || isCloudQuotaExhausted()) return;
+    if (!currentUser) {
+      setIsRegistrySyncing(false);
+      return;
+    }
 
     let isCancelled = false;
+    setIsRegistrySyncing(true);
+    const safetyTimer = setTimeout(() => {
+      if (!isCancelled) setIsRegistrySyncing(false);
+    }, 3500);
+
+    const applyRegistryData = (data: SaaSRegistryState) => {
+      const defaultReg = createDefaultSaaSRegistry();
+      const existingBusinesses = Array.isArray(data.businesses) ? data.businesses : [];
+      const hasFlagship = existingBusinesses.some((b) => b.id === DEFAULT_BUSINESS_ID);
+      const mergedBusinesses = hasFlagship
+        ? existingBusinesses
+        : [defaultReg.businesses[0], ...existingBusinesses];
+
+      setSaasRegistry({
+        platformSettings: {
+          ...DEFAULT_PLATFORM_SETTINGS,
+          ...(data.platformSettings || {}),
+          plans: {
+            ...DEFAULT_PLATFORM_SETTINGS.plans,
+            ...(data.platformSettings?.plans || {}),
+          },
+          paymentMethods:
+            data.platformSettings?.paymentMethods && data.platformSettings.paymentMethods.length > 0
+              ? data.platformSettings.paymentMethods
+              : DEFAULT_PLATFORM_SETTINGS.paymentMethods,
+        },
+        businesses: mergedBusinesses,
+        paymentRequests: Array.isArray(data.paymentRequests) ? data.paymentRequests : [],
+        partyAccounts: Array.isArray(data.partyAccounts) ? data.partyAccounts : [],
+        updatedAt: data.updatedAt || new Date().toISOString(),
+      });
+    };
+
+    // Fast one-time read so login routing resolves immediately
+    fetchSaaSRegistryOnce()
+      .then((regData) => {
+        if (isCancelled) return;
+        if (regData) {
+          applyRegistryData(regData);
+        }
+        setIsRegistrySyncing(false);
+      })
+      .catch(() => {
+        if (!isCancelled) setIsRegistrySyncing(false);
+      });
+
     const regPath = `businesses/${SAAS_REGISTRY_DOC_ID}`;
     const regRef = doc(firestoreDb, 'businesses', SAAS_REGISTRY_DOC_ID);
 
@@ -707,50 +788,30 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (snapshot.exists()) {
           const data = snapshot.data() as SaaSRegistryState;
           if (data) {
-            if (data.updatedAt && isLastPushedRegistryTimestamp(data.updatedAt)) {
-              return;
+            if (!data.updatedAt || !isLastPushedRegistryTimestamp(data.updatedAt)) {
+              applyRegistryData(data);
             }
-            const defaultReg = createDefaultSaaSRegistry();
-            const existingBusinesses = Array.isArray(data.businesses) ? data.businesses : [];
-            const hasFlagship = existingBusinesses.some((b) => b.id === DEFAULT_BUSINESS_ID);
-            const mergedBusinesses = hasFlagship
-              ? existingBusinesses
-              : [defaultReg.businesses[0], ...existingBusinesses];
-
-            setSaasRegistry({
-              platformSettings: {
-                ...DEFAULT_PLATFORM_SETTINGS,
-                ...(data.platformSettings || {}),
-                plans: {
-                  ...DEFAULT_PLATFORM_SETTINGS.plans,
-                  ...(data.platformSettings?.plans || {}),
-                },
-                paymentMethods:
-                  data.platformSettings?.paymentMethods && data.platformSettings.paymentMethods.length > 0
-                    ? data.platformSettings.paymentMethods
-                    : DEFAULT_PLATFORM_SETTINGS.paymentMethods,
-              },
-              businesses: mergedBusinesses,
-              paymentRequests: Array.isArray(data.paymentRequests) ? data.paymentRequests : [],
-              partyAccounts: Array.isArray(data.partyAccounts) ? data.partyAccounts : [],
-              updatedAt: data.updatedAt || new Date().toISOString(),
-            });
           }
-        } else if (!snapshot.metadata.fromCache && !isCloudQuotaExhausted()) {
-          const email = (currentUser.email || '').toLowerCase().trim();
-          if (email === MAIN_SUPER_ADMIN_EMAIL.toLowerCase()) {
-            const ok = await pushSaaSRegistryToCloud(saasRegistryRef.current, false);
-            if (!ok && isCloudQuotaExhausted()) {
-              setCloudSyncStatus('quota_exceeded');
-              setIsQuotaExceeded(true);
+          setIsRegistrySyncing(false);
+        } else if (!snapshot.metadata.fromCache) {
+          setIsRegistrySyncing(false);
+          if (!isCloudQuotaExhausted()) {
+            const email = (currentUser.email || '').toLowerCase().trim();
+            if (email === MAIN_SUPER_ADMIN_EMAIL.toLowerCase()) {
+              const ok = await pushSaaSRegistryToCloud(saasRegistryRef.current, false);
+              if (!ok && isCloudQuotaExhausted()) {
+                setCloudSyncStatus('quota_exceeded');
+                setIsQuotaExceeded(true);
+              }
             }
           }
         }
       },
       (error) => {
         if (isCancelled) return;
+        setIsRegistrySyncing(false);
         if (isQuotaExhaustedError(error)) {
-          markCloudQuotaExhausted(12);
+          markCloudQuotaExhausted(0.5);
           setCloudSyncStatus('quota_exceeded');
           setIsQuotaExceeded(true);
           return;
@@ -765,19 +826,31 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     return () => {
       isCancelled = true;
+      clearTimeout(safetyTimer);
       unsubscribe();
     };
-  }, [currentUser?.uid, isQuotaExceeded]);
+  }, [currentUser?.uid]);
 
-  // Real-time Firestore Sync for active Business Database across Mobile & Computer
+  // Real-time Firestore Sync for active Business Database across Mobile & Computer (Reads always run)
   useEffect(() => {
-    if (!isReady || !currentUser || isQuotaExceeded || isCloudQuotaExhausted()) return;
-    if (loadedBusinessIdRef.current !== activeBusinessId) return;
+    if (!isReady || !currentUser || loadedBusinessIdRef.current !== activeBusinessId) {
+      return;
+    }
 
     let isCancelled = false;
     const bizId = activeBusinessId;
     const docPath = `businesses/${bizId}`;
     const docRef = doc(firestoreDb, 'businesses', bizId);
+
+    if (!hasLoadedCloudOnce.current) {
+      setIsCloudDataSyncing(true);
+    }
+    const cloudSafetyTimer = setTimeout(() => {
+      if (!isCancelled) {
+        hasLoadedCloudOnce.current = true;
+        setIsCloudDataSyncing(false);
+      }
+    }, 4000);
 
     const unsubscribe = onSnapshot(
       docRef,
@@ -789,9 +862,10 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const cloudManifest = snapshot.data();
           if (cloudManifest) {
             if (cloudManifest.updatedAt && isLastPushedTimestamp(cloudManifest.updatedAt, bizId)) {
-              setCloudSyncStatus('synced');
+              setCloudSyncStatus(isCloudQuotaExhausted() ? 'quota_exceeded' : 'synced');
               setLastCloudSyncTime(cloudManifest.updatedAt);
               hasLoadedCloudOnce.current = true;
+              setIsCloudDataSyncing(false);
               return;
             }
             try {
@@ -807,40 +881,51 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     ...(remoteState.settings || {}),
                   },
                 }));
-                setCloudSyncStatus('synced');
+                setCloudSyncStatus(isCloudQuotaExhausted() ? 'quota_exceeded' : 'synced');
                 setLastCloudSyncTime(cloudManifest.updatedAt || new Date().toISOString());
                 hasLoadedCloudOnce.current = true;
+                setIsCloudDataSyncing(false);
+              } else {
+                hasLoadedCloudOnce.current = true;
+                setIsCloudDataSyncing(false);
               }
             } catch (err) {
               console.error('Failed to parse remote cloud state', err);
+              if (!isCancelled) {
+                hasLoadedCloudOnce.current = true;
+                setIsCloudDataSyncing(false);
+              }
             }
           }
-        } else if (
-          !snapshot.metadata.fromCache &&
-          !hasLoadedCloudOnce.current &&
-          dbRef.current.settings.isConfigured &&
-          !isCloudQuotaExhausted() &&
-          !isQuotaExceeded
-        ) {
+        } else if (!snapshot.metadata.fromCache) {
           hasLoadedCloudOnce.current = true;
-          try {
-            const res = await pushDatabaseToCloud(dbRef.current, currentUser, false, bizId);
-            if (!isCancelled && res.success) {
-              setCloudSyncStatus('synced');
-              setLastCloudSyncTime(res.updatedAt || new Date().toISOString());
-            } else if (!isCancelled && res.isQuotaExhausted) {
-              setCloudSyncStatus('quota_exceeded');
-              setIsQuotaExceeded(true);
+          setIsCloudDataSyncing(false);
+          if (
+            dbRef.current.settings.isConfigured &&
+            !isCloudQuotaExhausted() &&
+            !isQuotaExceeded
+          ) {
+            try {
+              const res = await pushDatabaseToCloud(dbRef.current, currentUser, false, bizId);
+              if (!isCancelled && res.success) {
+                setCloudSyncStatus('synced');
+                setLastCloudSyncTime(res.updatedAt || new Date().toISOString());
+              } else if (!isCancelled && res.isQuotaExhausted) {
+                setCloudSyncStatus('quota_exceeded');
+                setIsQuotaExceeded(true);
+              }
+            } catch (err) {
+              console.warn('Initial cloud push skipped:', err);
             }
-          } catch (err) {
-            console.warn('Initial cloud push skipped:', err);
           }
         }
       },
       (error) => {
         if (isCancelled) return;
+        hasLoadedCloudOnce.current = true;
+        setIsCloudDataSyncing(false);
         if (isQuotaExhaustedError(error)) {
-          markCloudQuotaExhausted(12);
+          markCloudQuotaExhausted(0.5);
           setCloudSyncStatus('quota_exceeded');
           setIsQuotaExceeded(true);
           console.warn('Firestore onSnapshot quota limit reached (offline fallback active):', error);
@@ -857,9 +942,10 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     return () => {
       isCancelled = true;
+      clearTimeout(cloudSafetyTimer);
       unsubscribe();
     };
-  }, [currentUser?.uid, isReady, isQuotaExceeded, activeBusinessId]);
+  }, [currentUser?.uid, isReady, activeBusinessId]);
 
   // Debounced Push to Firestore Cloud on local changes (per activeBusinessId)
   useEffect(() => {
@@ -917,9 +1003,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       : 'Press Business Management & Accounting | Designed by MD. Salsabil';
   }, [db.settings.theme, db.settings.numberFormat, db.settings.name]);
 
-  // Auto-route newly logged-in shop owners or party portal users to their registered business
+  // Auto-route newly logged-in shop owners, approved staff, or party portal users straight to their registered business
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !authResolved || isRegistrySyncing) return;
     const email = (currentUser.email || '').toLowerCase().trim();
     if (email === MAIN_SUPER_ADMIN_EMAIL.toLowerCase()) return;
 
@@ -952,14 +1038,28 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         currentBiz.ownerUid === currentUser.uid ||
         (currentBiz.memberEmails || []).some((m) => m.toLowerCase().trim() === email));
 
-    if (!belongsToCurrent) {
-      const ownBiz = saasRegistry.businesses.find(
-        (b) =>
-          b.ownerEmail?.toLowerCase().trim() === email ||
-          b.ownerUid === currentUser.uid ||
-          (b.memberEmails || []).some((m) => m.toLowerCase().trim() === email)
-      );
-      if (ownBiz && ownBiz.id !== activeBusinessId) {
+    if (belongsToCurrent && currentBiz) {
+      // Automatically unlock the user's matched business on login (only switching shops in Switcher prompts password)
+      if (!unlockedBusinessIds.includes(currentBiz.id)) {
+        markBusinessUnlockedInSession(currentBiz.id);
+      }
+      return;
+    }
+
+    const matchingBusinesses = saasRegistry.businesses.filter(
+      (b) =>
+        b.ownerEmail?.toLowerCase().trim() === email ||
+        b.ownerUid === currentUser.uid ||
+        (b.memberEmails || []).some((m) => m.toLowerCase().trim() === email)
+    );
+    const ownBiz =
+      matchingBusinesses.find((b) => b.id !== DEFAULT_BUSINESS_ID && b.status === 'approved') ||
+      matchingBusinesses.find((b) => b.id !== DEFAULT_BUSINESS_ID) ||
+      matchingBusinesses[0];
+
+    if (ownBiz) {
+      markBusinessUnlockedInSession(ownBiz.id);
+      if (ownBiz.id !== activeBusinessId) {
         try {
           localStorage.setItem(ACTIVE_BUSINESS_STORAGE_KEY, ownBiz.id);
         } catch {
@@ -969,7 +1069,15 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setActiveBusinessId(ownBiz.id);
       }
     }
-  }, [currentUser?.uid, saasRegistry.businesses, saasRegistry.partyAccounts, activeBusinessId]);
+  }, [
+    currentUser?.uid,
+    authResolved,
+    isRegistrySyncing,
+    saasRegistry.businesses,
+    saasRegistry.partyAccounts,
+    activeBusinessId,
+    unlockedBusinessIds,
+  ]);
 
   // READ-ONLY / VIEWER ENFORCEMENT
   const checkReadOnly = (): boolean => {
@@ -2975,13 +3083,36 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return role === 'super_admin' || role === 'admin' || role === 'manager';
   }, [currentUser, isMainAdmin, currentUserAccess]);
 
-  // Auto-register any newly logged-in staff/admin user in db.userAccessList as 'pending' (NEVER register Party Portal customers as press staff)
+  // Auto-register any newly logged-in staff/admin user in db.userAccessList (wait for cloud hydration so approved users are never overwritten/re-pending)
   useEffect(() => {
-    if (!currentUser || !isReady || loadedBusinessIdRef.current !== activeBusinessId) return;
+    if (
+      !currentUser ||
+      !authResolved ||
+      isRegistrySyncing ||
+      isCloudDataSyncing ||
+      !isReady ||
+      !hasLoadedCloudOnce.current ||
+      loadedBusinessIdRef.current !== activeBusinessId
+    ) {
+      return;
+    }
     if (isPartyPortalUser) return;
 
     const email = (currentUser.email || '').toLowerCase().trim();
     const isSuperAdminEmail = email === MAIN_SUPER_ADMIN_EMAIL.toLowerCase();
+
+    // Never auto-register as pending in DEFAULT_BUSINESS_ID when user owns/belongs to another business
+    if (!isSuperAdminEmail && activeBusinessId === DEFAULT_BUSINESS_ID) {
+      const belongsToOtherBiz = saasRegistryRef.current.businesses.some(
+        (b) =>
+          b.id !== DEFAULT_BUSINESS_ID &&
+          (b.ownerEmail?.toLowerCase().trim() === email ||
+            b.ownerUid === currentUser.uid ||
+            (b.memberEmails || []).some((m) => m.toLowerCase().trim() === email))
+      );
+      if (belongsToOtherBiz) return;
+    }
+
     const isShopOwner = Boolean(
       currentBusiness &&
         currentBusiness.id !== DEFAULT_BUSINESS_ID &&
@@ -3074,7 +3205,17 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         userAccessList: [newUser, ...list],
       };
     });
-  }, [currentUser, isReady, db.settings.adminEmail, activeBusinessId, currentBusiness]);
+  }, [
+    currentUser,
+    authResolved,
+    isRegistrySyncing,
+    isCloudDataSyncing,
+    isReady,
+    db.settings.adminEmail,
+    activeBusinessId,
+    currentBusiness,
+    isPartyPortalUser,
+  ]);
 
   // ==========================================
   // এডমিন প্যানেল পাসওয়ার্ড (Salsabil1522) ও এক্সেস নিয়ন্ত্রণ
@@ -3401,7 +3542,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       phone: (data.phone || '').trim(),
       address: (data.address || '').trim(),
       shopPassword: cleanShopPass,
-      status: isMainAdmin ? 'approved' : 'pending',
+      status: isMainAdmin || planType === 'trial' ? 'approved' : 'pending',
       planType,
       customPrice: basePrice,
       discountType: 'amount',
@@ -3667,9 +3808,40 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return true;
   };
 
+  const syncStaffEmailToRegistry = (targetEmail: string, shouldInclude: boolean) => {
+    const cleanEmail = (targetEmail || '').toLowerCase().trim();
+    if (!cleanEmail || activeBusinessId === DEFAULT_BUSINESS_ID) return;
+    const reg = saasRegistryRef.current;
+    const targetBiz = reg.businesses.find((b) => b.id === activeBusinessId);
+    if (!targetBiz) return;
+    const ownerEmail = (targetBiz.ownerEmail || '').toLowerCase().trim();
+    if (!shouldInclude && cleanEmail === ownerEmail) return;
+
+    const currentMembers = targetBiz.memberEmails || [];
+    const exists = currentMembers.some((m) => m.toLowerCase().trim() === cleanEmail);
+    if (shouldInclude && exists) return;
+    if (!shouldInclude && !exists) return;
+
+    const nextMembers = shouldInclude
+      ? [...currentMembers, cleanEmail]
+      : currentMembers.filter((m) => m.toLowerCase().trim() !== cleanEmail);
+
+    const nowIso = new Date().toISOString();
+    persistRegistryUpdate({
+      ...reg,
+      businesses: reg.businesses.map((b) =>
+        b.id === activeBusinessId ? { ...b, memberEmails: nextMembers, updatedAt: nowIso } : b
+      ),
+      updatedAt: nowIso,
+    });
+  };
+
   const updateUserAccess = (uid: string, updates: Partial<AppUserAccess>) => {
     if (guardReadOnly()) return;
     const now = new Date().toISOString();
+    const existing = (dbRef.current.userAccessList || []).find(
+      (u) => u.uid === uid || u.email === uid
+    );
     setDb((prev) => ({
       ...prev,
       userAccessList: (prev.userAccessList || []).map((u) => {
@@ -3684,16 +3856,25 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return u;
       }),
     }));
+    if (existing?.email && updates.status !== undefined) {
+      syncStaffEmailToRegistry(existing.email, updates.status === 'approved');
+    }
   };
 
   const deleteUserAccess = (uid: string): boolean => {
     if (guardReadOnly()) return false;
+    const existing = (dbRef.current.userAccessList || []).find(
+      (u) => u.uid === uid || u.email === uid
+    );
     setDb((prev) => ({
       ...prev,
       userAccessList: (prev.userAccessList || []).filter(
         (u) => u.uid !== uid && u.email !== uid
       ),
     }));
+    if (existing?.email) {
+      syncStaffEmailToRegistry(existing.email, false);
+    }
     return true;
   };
 
@@ -4105,12 +4286,186 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setIsQuotaDismissed(true);
   };
 
-  const loginWithGoogle = async () => {
+  const completeGoogleAuthSession = useCallback(
+    async (
+      user: User,
+      businessReg?: {
+        registerNewBusiness?: boolean;
+        businessName?: string;
+        phone?: string;
+        address?: string;
+        planType?: SubscriptionPlanType;
+        shopPassword?: string;
+      }
+    ) => {
+      const email = (user.email || '').toLowerCase().trim();
+      const fetchedReg = await fetchSaaSRegistryOnce();
+      const baseReg = fetchedReg || saasRegistryRef.current;
+      const existingBusinesses = Array.isArray(baseReg.businesses) ? baseReg.businesses : [];
+
+      if (email === MAIN_SUPER_ADMIN_EMAIL.toLowerCase()) {
+        return;
+      }
+
+      const matching = existingBusinesses.filter(
+        (b) =>
+          b.ownerEmail?.toLowerCase().trim() === email ||
+          b.ownerUid === user.uid ||
+          (b.memberEmails || []).some((m) => m.toLowerCase().trim() === email)
+      );
+      const existingTarget =
+        matching.find((b) => b.id !== DEFAULT_BUSINESS_ID && b.status === 'approved') ||
+        matching.find((b) => b.id !== DEFAULT_BUSINESS_ID) ||
+        matching[0];
+
+      if (existingTarget) {
+        try {
+          sessionStorage.setItem(`press_unlocked_shops_${user.uid}`, JSON.stringify([existingTarget.id]));
+          localStorage.setItem(ACTIVE_BUSINESS_STORAGE_KEY, existingTarget.id);
+        } catch {
+          // ignore
+        }
+        setUnlockedBusinessIds([existingTarget.id]);
+        setActiveBusinessId(existingTarget.id);
+        return;
+      }
+
+      if (businessReg?.registerNewBusiness && businessReg.businessName?.trim()) {
+        const now = new Date();
+        const nowIso = now.toISOString();
+        const planType: SubscriptionPlanType = businessReg.planType || 'trial';
+        const settings = baseReg.platformSettings || saasRegistryRef.current.platformSettings;
+        const planCfg =
+          planType === 'lifetime' || planType === 'one_time'
+            ? settings.plans.one_time
+            : settings.plans[planType];
+        const durationDays = resolvePlanDurationDays(planType, planCfg?.durationDays, settings);
+        const basePrice = planCfg?.basePrice || 0;
+        const expiresAt =
+          durationDays !== null
+            ? new Date(now.getTime() + durationDays * 86400000).toISOString()
+            : null;
+        const bizId = `biz_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+        const cleanName = businessReg.businessName.trim();
+
+        const newBiz: RegisteredBusiness = {
+          id: bizId,
+          name: cleanName,
+          nameEn: cleanName,
+          ownerUid: user.uid,
+          ownerEmail: email,
+          ownerName: user.displayName || email,
+          phone: businessReg.phone?.trim() || '',
+          address: businessReg.address?.trim() || '',
+          shopPassword: (businessReg.shopPassword || '').trim(),
+          status: 'approved',
+          planType,
+          customPrice: basePrice,
+          discountType: 'amount',
+          discountValue: 0,
+          discountAmount: 0,
+          finalPrice: basePrice,
+          paidAmount: 0,
+          durationDays,
+          activatedAt: nowIso,
+          expiresAt,
+          memberEmails: email ? [email] : [],
+          notes: 'গুগল ১-ক্লিক সাইন আপের মাধ্যমে নতুন ব্যবসা নিবন্ধিত',
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+
+        const nextRegistry: SaaSRegistryState = {
+          ...baseReg,
+          businesses: [newBiz, ...existingBusinesses],
+          updatedAt: nowIso,
+        };
+        setSaasRegistry(nextRegistry);
+        await pushSaaSRegistryToCloud(nextRegistry, false);
+        await initializeNewBusinessDatabaseInCloud(newBiz, defaultSettings, user);
+        try {
+          sessionStorage.setItem(`press_unlocked_shops_${user.uid}`, JSON.stringify([bizId]));
+          localStorage.setItem(ACTIVE_BUSINESS_STORAGE_KEY, bizId);
+        } catch {
+          // ignore
+        }
+        setUnlockedBusinessIds([bizId]);
+        setActiveBusinessId(bizId);
+      }
+    },
+    [resolvePlanDurationDays]
+  );
+
+  // Handle redirect-based Google Sign-In result on standalone browsers (Vercel / Mobile Safari / Chrome)
+  useEffect(() => {
+    let active = true;
+    getRedirectResult(auth)
+      .then(async (res) => {
+        if (!active || !res?.user) return;
+        let pendingReg: any = undefined;
+        try {
+          const raw = sessionStorage.getItem('press_pending_google_biz_reg');
+          if (raw) {
+            pendingReg = JSON.parse(raw);
+            sessionStorage.removeItem('press_pending_google_biz_reg');
+          }
+        } catch {
+          // ignore
+        }
+        clearCloudSyncSessionCache();
+        await completeGoogleAuthSession(res.user, pendingReg);
+      })
+      .catch((err) => {
+        console.warn('Google getRedirectResult warning:', err);
+        try {
+          sessionStorage.removeItem('press_pending_google_biz_reg');
+        } catch {
+          // ignore
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [completeGoogleAuthSession]);
+
+  const loginWithGoogle = async (businessReg?: {
+    registerNewBusiness?: boolean;
+    businessName?: string;
+    phone?: string;
+    address?: string;
+    planType?: SubscriptionPlanType;
+    shopPassword?: string;
+  }) => {
+    clearCloudSyncSessionCache();
     try {
       const res = await signInWithPopup(auth, googleProvider);
+      if (res.user) {
+        await completeGoogleAuthSession(res.user, businessReg);
+      }
       return { success: true, user: res.user };
     } catch (err: any) {
       const code = err?.code || '';
+      const host = typeof window !== 'undefined' ? window.location.hostname : '';
+      const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
+      const canRedirect =
+        !isInIframe && !host.includes('ais-dev-') && !host.includes('ais-pre-');
+
+      if (
+        (code === 'auth/popup-blocked' ||
+          code === 'auth/operation-not-supported-in-this-environment') &&
+        canRedirect
+      ) {
+        try {
+          if (businessReg) {
+            sessionStorage.setItem('press_pending_google_biz_reg', JSON.stringify(businessReg));
+          }
+          await signInWithRedirect(auth, googleProvider);
+          return { success: true };
+        } catch (redirErr: any) {
+          console.warn('Google Redirect fallback error:', redirErr);
+        }
+      }
+
       if (
         code === 'auth/cancelled-popup-request' ||
         code === 'auth/popup-closed-by-user'
@@ -4127,8 +4482,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (code === 'auth/unauthorized-domain') {
         return {
           success: false,
-          error:
-            'এই ডোমেইনটি Firebase-এ গুগল লগইনের জন্য অনুমোদিত নয়। Firebase Console > Authentication > Settings > Authorized domains-এ আপনার ভারসেল/কাস্টম ডোমেইন যোগ করুন অথবা নিচের ইউজারনেম/ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করুন।',
+          error: `এই ডোমেইনটি (${host}) Firebase-এ গুগল লগইনের জন্য অনুমোদিত নয়। Firebase Console > Authentication > Settings > Authorized domains-এ "${host}" যোগ করুন অথবা নিচের ইউজারনেম/ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করুন।`,
         };
       }
       if (code === 'auth/operation-not-supported-in-this-environment') {
@@ -4166,6 +4520,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (!password) {
         return { success: false, error: 'পাসওয়ার্ড লিখুন' };
       }
+      clearCloudSyncSessionCache();
       const email = normalizeIdentifierToEmail(identifier);
       const res = await signInWithEmailAndPassword(auth, email, password);
       return { success: true, user: res.user };
@@ -4211,6 +4566,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           return { success: false, error: 'দোকানের নিরাপত্তার জন্য কমপক্ষে ৪ অক্ষরের পাসওয়ার্ড দিন।' };
         }
       }
+      clearCloudSyncSessionCache();
       const email = normalizeIdentifierToEmail(identifier);
       const res = await createUserWithEmailAndPassword(auth, email, password);
       if (displayName.trim() && res.user) {
@@ -4218,10 +4574,12 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
 
       if (res.user && businessReg?.registerNewBusiness && businessReg.businessName?.trim()) {
+        const fetchedReg = await fetchSaaSRegistryOnce();
+        const baseReg = fetchedReg || saasRegistryRef.current;
         const now = new Date();
         const nowIso = now.toISOString();
         const planType: SubscriptionPlanType = businessReg.planType || 'trial';
-        const settings = saasRegistryRef.current.platformSettings;
+        const settings = baseReg.platformSettings || saasRegistryRef.current.platformSettings;
         const planCfg =
           planType === 'lifetime' || planType === 'one_time'
             ? settings.plans.one_time
@@ -4232,7 +4590,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           durationDays !== null
             ? new Date(now.getTime() + durationDays * 86400000).toISOString()
             : null;
-        const isSuperEmail = email === MAIN_SUPER_ADMIN_EMAIL.toLowerCase();
         const bizId = `biz_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
 
         const newBiz: RegisteredBusiness = {
@@ -4245,7 +4602,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           phone: businessReg.phone?.trim() || '',
           address: businessReg.address?.trim() || '',
           shopPassword: (businessReg.shopPassword || '').trim(),
-          status: isSuperEmail ? 'approved' : 'pending',
+          status: 'approved',
           planType,
           customPrice: basePrice,
           discountType: 'amount',
@@ -4263,8 +4620,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         };
 
         const nextRegistry: SaaSRegistryState = {
-          ...saasRegistryRef.current,
-          businesses: [newBiz, ...saasRegistryRef.current.businesses],
+          ...baseReg,
+          businesses: [newBiz, ...(baseReg.businesses || [])],
           updatedAt: nowIso,
         };
         setSaasRegistry(nextRegistry);
@@ -4780,6 +5137,13 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const logout = async () => {
     try {
       const uid = currentUser?.uid;
+      // Clear hydration refs BEFORE signOut & resetting React state so Dual Persistence
+      // never overwrites saved IndexedDB or localStorage records with initialEmptyState!
+      loadedBusinessIdRef.current = null;
+      hasLoadedCloudOnce.current = false;
+      isRemoteCloudUpdate.current = false;
+      clearCloudSyncSessionCache();
+      setIsReady(false);
       await signOut(auth);
       setIsAdminPanelUnlocked(false);
       setUnlockedBusinessIds([]);
@@ -5121,6 +5485,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       deleteAutoSnapshot,
       storageStats,
       currentUser,
+      authResolved,
+      isCloudHydrating: Boolean(currentUser && (isRegistrySyncing || isCloudDataSyncing)),
       loginWithGoogle,
       loginWithEmailOrUsername,
       signupWithEmailOrUsername,
@@ -5187,6 +5553,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       autoSnapshots,
       storageStats,
       currentUser,
+      authResolved,
+      isRegistrySyncing,
+      isCloudDataSyncing,
       cloudSyncStatus,
       isQuotaExceeded,
       isQuotaDismissed,

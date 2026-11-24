@@ -38,10 +38,11 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({ isOpen, onClos
   const currentOrigin = getCurrentOriginUrl();
   const sharedAppUrl = getSharedAppUrl();
   const onDevPreview = isDevPreviewOrigin(currentOrigin);
+  const needsPublishCheck = onDevPreview && sharedAppUrl.includes('://ais-pre-');
 
   useEffect(() => {
     if (!isOpen) return;
-    if (!onDevPreview) {
+    if (!needsPublishCheck) {
       setSharedStatus('live');
       return;
     }
@@ -76,12 +77,12 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({ isOpen, onClos
       img.onload = null;
       img.onerror = null;
     };
-  }, [isOpen, onDevPreview, sharedAppUrl, checkNonce]);
+  }, [isOpen, needsPublishCheck, sharedAppUrl, checkNonce]);
 
   if (!isOpen) return null;
 
-  // Use Shared App URL whenever it is published/live; otherwise fall back to active working origin so New Tab never opens a 404 page
-  const appUrl = !onDevPreview || sharedStatus === 'live' ? sharedAppUrl : currentOrigin;
+  // Use Shared App URL (pressmanagement.vercel.app or live custom domain)
+  const appUrl = !needsPublishCheck || sharedStatus === 'live' ? sharedAppUrl : currentOrigin;
   const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
 
   const handleInstallClick = async () => {

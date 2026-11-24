@@ -167,7 +167,13 @@ export function isCloudQuotaExhausted(): boolean {
   }
 }
 
-export function markCloudQuotaExhausted(hours: number = 8) {
+export function clearCloudSyncSessionCache() {
+  businessPushCache.clear();
+  lastPushedRegistryJson = '';
+  lastPushedRegistryAt = '';
+}
+
+export function markCloudQuotaExhausted(hours: number = 0.5) {
   try {
     const expiry = Date.now() + hours * 60 * 60 * 1000;
     if (typeof localStorage !== 'undefined') {
@@ -231,6 +237,27 @@ async function executePushDatabaseToCloud(
       success: false,
       isQuotaExhausted: true,
       error: 'দৈনিক ফ্রি ক্লাউড রাইট কোটা সীমা অতিক্রম করেছে।',
+    };
+  }
+
+  const hasAnyRecords =
+    (dbState.parties?.length || 0) > 0 ||
+    (dbState.books?.length || 0) > 0 ||
+    (dbState.productions?.length || 0) > 0 ||
+    (dbState.invoices?.length || 0) > 0 ||
+    (dbState.collections?.length || 0) > 0 ||
+    (dbState.employees?.length || 0) > 0 ||
+    (dbState.transactions?.length || 0) > 0 ||
+    (dbState.plates?.length || 0) > 0 ||
+    (dbState.paperStock?.length || 0) > 0 ||
+    (dbState.inkSuppliers?.length || 0) > 0 ||
+    (dbState.orderSlips?.length || 0) > 0 ||
+    (dbState.inkOrderSlips?.length || 0) > 0;
+
+  if (!force && !dbState.settings?.isConfigured && !hasAnyRecords) {
+    return {
+      success: false,
+      error: 'অপ্রস্তুত ফাঁকা স্টেট ক্লাউডে ওভাররাইট করা হয়নি।',
     };
   }
 
@@ -446,6 +473,24 @@ export async function fetchDatabaseFromCloud(
 /**
  * Sync Master SaaS Platform Registry (Registered Businesses, Free Trial Days, Plans & Discounts)
  */
+export async function fetchSaaSRegistryOnce(): Promise<SaaSRegistryState | null> {
+  const docPath = `businesses/${SAAS_REGISTRY_DOC_ID}`;
+  try {
+    const regRef = doc(firestoreDb, 'businesses', SAAS_REGISTRY_DOC_ID);
+    const snap = await getDoc(regRef);
+    if (snap.exists()) {
+      return snap.data() as SaaSRegistryState;
+    }
+    return null;
+  } catch (err) {
+    if (isPermissionDeniedError(err)) {
+      handleFirestoreError(err, OperationType.GET, docPath);
+    }
+    console.warn('fetchSaaSRegistryOnce warning:', err);
+    return null;
+  }
+}
+
 export async function pushSaaSRegistryToCloud(
   registry: SaaSRegistryState,
   force: boolean = false
@@ -470,7 +515,7 @@ export async function pushSaaSRegistryToCloud(
     return true;
   } catch (err) {
     if (isQuotaExhaustedError(err)) {
-      markCloudQuotaExhausted(12);
+      markCloudQuotaExhausted(0.5);
       return false;
     }
     if (isPermissionDeniedError(err)) {

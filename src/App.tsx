@@ -254,6 +254,9 @@ const AppContent: React.FC = () => {
   const {
     db,
     isReady,
+    authResolved,
+    isCloudHydrating,
+    updateSettings,
     currentUser,
     currentUserAccess,
     isMainAdmin,
@@ -304,13 +307,57 @@ const AppContent: React.FC = () => {
     }
   }, [isReady, currentUser, isMainAdmin, currentUserAccess, activeTab, canAccessModule]);
 
-  if (!isReady) {
+  const hasExistingRecords = Boolean(
+    (db.parties?.length || 0) > 0 ||
+      (db.books?.length || 0) > 0 ||
+      (db.productions?.length || 0) > 0 ||
+      (db.invoices?.length || 0) > 0 ||
+      (db.collections?.length || 0) > 0 ||
+      (db.employees?.length || 0) > 0 ||
+      (db.transactions?.length || 0) > 0 ||
+      (db.orderSlips?.length || 0) > 0 ||
+      (db.inkPurchases?.length || 0) > 0
+  );
+  const isRegisteredNonDefaultShop = Boolean(
+    currentBusiness && currentBusiness.id !== DEFAULT_BUSINESS_ID
+  );
+
+  // Auto-heal settings.isConfigured when a registered shop or saved records already exist
+  useEffect(() => {
+    if (!isReady || !authResolved || !currentUser || isCloudHydrating) return;
+    if (!db.settings.isConfigured && (isRegisteredNonDefaultShop || hasExistingRecords)) {
+      updateSettings({
+        isConfigured: true,
+        ...(isRegisteredNonDefaultShop && currentBusiness?.name && !db.settings.name
+          ? { name: currentBusiness.name, nameEn: currentBusiness.nameEn || currentBusiness.name }
+          : {}),
+      });
+    }
+  }, [
+    isReady,
+    authResolved,
+    currentUser,
+    isCloudHydrating,
+    db.settings.isConfigured,
+    db.settings.name,
+    isRegisteredNonDefaultShop,
+    hasExistingRecords,
+    currentBusiness?.name,
+    currentBusiness?.nameEn,
+    updateSettings,
+  ]);
+
+  if (!isReady || !authResolved || (currentUser && isCloudHydrating)) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white text-sm p-4">
         <div className="flex flex-col items-center space-y-3 text-center">
           <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
           <p className="font-bold text-base">Press Business Management & Accounting প্রস্তুত হচ্ছে...</p>
-          <p className="text-xs text-emerald-400 font-semibold">Designed by MD. Salsabil</p>
+          <p className="text-xs text-emerald-400 font-semibold">
+            {currentUser && isCloudHydrating
+              ? 'ক্লাউড ডাটা ও দোকানের তথ্য লোড হচ্ছে...'
+              : 'Designed by MD. Salsabil'}
+          </p>
         </div>
       </div>
     );
@@ -374,8 +421,13 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // First run Setup Wizard
-  if (!db.settings.isConfigured) {
+  // First run Setup Wizard (only for initial unconfigured flagship press when no records exist)
+  if (
+    !db.settings.isConfigured &&
+    !isRegisteredNonDefaultShop &&
+    !hasExistingRecords &&
+    (isMainAdmin || currentUserAccess?.status === 'approved')
+  ) {
     return <SetupWizard />;
   }
 

@@ -3,6 +3,8 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,
@@ -49,6 +51,7 @@ function createFirestoreInstance(): Firestore {
 export const db = createFirestoreInstance();
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export function getSecondaryAuth() {
   const secApp =
@@ -59,6 +62,8 @@ export function getSecondaryAuth() {
 
 export {
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,
@@ -80,31 +85,15 @@ if (typeof localStorage !== 'undefined') {
   }
 }
 
-// Validate initial connection to Firestore when quota is available
+// Validate initial connection to Firestore when available
 async function testConnection() {
   try {
-    if (typeof localStorage !== 'undefined') {
-      const val = localStorage.getItem('firestore_quota_exhausted_until');
-      if (val && Date.now() < Number(val)) {
-        return;
-      }
-    }
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
     if (error instanceof Error) {
       const msg = error.message.toLowerCase();
       if (msg.includes('resource-exhausted') || msg.includes('quota')) {
-        try {
-          if (typeof localStorage !== 'undefined') {
-            localStorage.setItem(
-              'firestore_quota_exhausted_until',
-              (Date.now() + 12 * 60 * 60 * 1000).toString()
-            );
-          }
-        } catch {
-          // ignore storage errors
-        }
-        console.warn('Firebase quota note:', error.message);
+        console.warn('Firebase read quota note:', error.message);
       } else if (msg.includes('the client is offline')) {
         console.warn('Firebase connection note:', error.message);
       }

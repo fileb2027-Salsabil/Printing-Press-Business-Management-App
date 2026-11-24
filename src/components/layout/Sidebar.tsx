@@ -26,9 +26,11 @@ import {
   X,
   Crown,
   Lock,
+  Unlock,
   ClipboardList,
 } from 'lucide-react';
 import { PWAInstallButton } from '../common/PWAInstallButton';
+import { AdminPasswordModal } from '../auth/AdminPasswordModal';
 import { AppPermissionModule } from '../../types';
 
 interface SidebarProps {
@@ -44,7 +46,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { db, canAccessModule, isMainAdmin, isModuleLockedBySubscription } = useDatabase();
+  const {
+    db,
+    canAccessModule,
+    isMainAdmin,
+    isModuleLockedBySubscription,
+    isAdminPanelUnlocked,
+    lockAdminPanel,
+  } = useDatabase();
+  const [isAdminModalOpen, setIsAdminModalOpen] = React.useState(false);
   const lang = db.settings.language;
   const t = translations[lang];
 
@@ -151,8 +161,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </nav>
 
-        {/* Mobile / PC App Installation Button */}
-        <div className="px-3 pb-2">
+        {/* Admin Panel Lock/Unlock & Mobile / PC App Installation */}
+        <div className="px-3 pb-2 space-y-2">
+          {isAdminPanelUnlocked ? (
+            <button
+              type="button"
+              onClick={() => {
+                lockAdminPanel();
+                onClose();
+              }}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold bg-emerald-900/50 hover:bg-rose-900/60 text-emerald-300 hover:text-rose-200 border border-emerald-700/60 hover:border-rose-600/60 transition group"
+              title="এডমিন প্যানেল আনলকড আছে। লক করতে ক্লিক করুন।"
+            >
+              <span className="flex items-center space-x-2">
+                <Unlock className="w-3.5 h-3.5 text-emerald-400 group-hover:hidden shrink-0" />
+                <Lock className="w-3.5 h-3.5 text-rose-400 hidden group-hover:inline shrink-0" />
+                <span className="group-hover:hidden">এডমিন প্যানেল আনলকড</span>
+                <span className="hidden group-hover:inline">এডমিন লক করুন</span>
+              </span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsAdminModalOpen(true)}
+              className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-amber-900/40 text-slate-200 hover:text-amber-300 border border-slate-700 hover:border-amber-600/50 transition"
+              title="এডমিন প্যানেল (সেটিংস, ডাটা ম্যানেজমেন্ট ও ইউজার এক্সেস) আনলক করতে পাসওয়ার্ড দিন"
+            >
+              <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>এডমিন প্যানেল আনলক</span>
+            </button>
+          )}
           <PWAInstallButton variant="sidebar" />
         </div>
 
@@ -165,6 +203,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
       </aside>
+
+      {/* Admin Panel Password Unlock Modal */}
+      <AdminPasswordModal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
+        onSuccess={() => {
+          onNavigate('user-access');
+          onClose();
+        }}
+      />
     </>
   );
 };

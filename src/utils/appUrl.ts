@@ -1,17 +1,15 @@
-export const ACTIVE_APP_URL =
-  'https://ais-pre-qzircfaw36troujsrun3k5-645511411022.asia-southeast1.run.app';
+export const ACTIVE_APP_URL = 'https://pressmanagement.vercel.app';
 
 export function getSharedAppUrl(): string {
   if (typeof window !== 'undefined' && window.location?.origin) {
     const origin = window.location.origin;
-    if (origin.includes('://ais-dev-')) {
-      return origin.replace('://ais-dev-', '://ais-pre-');
-    }
     if (
+      origin &&
       origin !== 'null' &&
       !origin.startsWith('file:') &&
       !origin.includes('localhost') &&
-      !origin.includes('127.0.0.1')
+      !origin.includes('127.0.0.1') &&
+      !origin.includes('://ais-dev-')
     ) {
       return origin;
     }
@@ -37,5 +35,6 @@ export function isDevPreviewOrigin(url?: string): boolean {
 export function getCleanAppUrl(): string {
   return getSharedAppUrl();
 }
+
 
 
