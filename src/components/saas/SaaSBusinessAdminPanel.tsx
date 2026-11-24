@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useDatabase } from '../../context/DatabaseContext';
 import {
   AppPermissionModule,
+  AppUserAccess,
   BusinessApprovalStatus,
   PaymentMethodConfig,
   PartyPortalAccount,
@@ -27,10 +28,13 @@ import {
   Plus,
   Search,
   Settings2,
+  ShieldCheck,
   Sparkles,
   Tag,
   Trash2,
+  UserCheck,
   Users,
+  UserX,
   X,
   XCircle,
   Save,
@@ -65,6 +69,7 @@ const ALL_CONFIGURABLE_MODULES: { key: AppPermissionModule; label: string; categ
 
 export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ onNavigate }) => {
   const {
+    db,
     saasRegistry,
     activeBusinessId,
     switchBusiness,
@@ -76,13 +81,23 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
     adminUpdatePartyAccount,
     deletePartyAccount,
     provisionStaffUser,
+    updateUserAccess,
+    deleteUserAccess,
     setMyLoginPassword,
     currentUser,
   } = useDatabase();
 
-  const [subTab, setSubTab] = useState<'businesses' | 'packages' | 'party-accounts'>('businesses');
+  const [subTab, setSubTab] = useState<'businesses' | 'packages' | 'staff-accounts' | 'party-accounts'>('businesses');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'expired' | 'suspended'>('all');
+
+  // Staff Accounts Admin Control State
+  const [staffSearch, setStaffSearch] = useState('');
+  const [staffBizFilter, setStaffBizFilter] = useState('all');
+  const [staffStatusFilter, setStaffStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [editingStaffTarget, setEditingStaffTarget] = useState<AppUserAccess | null>(null);
+  const [staffStatusField, setStaffStatusField] = useState<AppUserAccess['status']>('approved');
+  const [deleteStaffTarget, setDeleteStaffTarget] = useState<AppUserAccess | null>(null);
 
   // Party Portal Admin Control State
   const [partySearch, setPartySearch] = useState('');
@@ -283,30 +298,93 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
   };
 
   const openStaffProvisionModal = (bizId?: string) => {
+    setEditingStaffTarget(null);
     setStaffBizId(bizId || activeBusinessId || (saasRegistry.businesses[0]?.id ?? DEFAULT_BUSINESS_ID));
     setStaffName('');
     setStaffIdentifier('');
     setStaffPassword('');
     setShowStaffPwd(false);
+    setStaffStatusField('approved');
     setStaffError('');
     applyStaffRolePreset('manager');
+    setIsStaffModalOpen(true);
+  };
+
+  const openEditStaffModal = (user: AppUserAccess) => {
+    setEditingStaffTarget(user);
+    setStaffBizId(user.businessId || activeBusinessId || DEFAULT_BUSINESS_ID);
+    setStaffName(user.displayName || '');
+    setStaffIdentifier(user.loginUsername || user.email || '');
+    setStaffPassword('');
+    setShowStaffPwd(false);
+    setStaffStatusField(user.status || 'approved');
+    setStaffRole(user.role || 'operator');
+    setStaffReadOnly(user.role === 'viewer' || !!user.isReadOnly);
+    const p: Record<AppPermissionModule, boolean> = {
+      dashboard: !!user.permissions?.dashboard,
+      parties: !!user.permissions?.parties,
+      books: !!user.permissions?.books,
+      production: !!user.permissions?.production,
+      plates: !!user.permissions?.plates,
+      paperStock: !!user.permissions?.paperStock,
+      billing: !!user.permissions?.billing,
+      collections: !!user.permissions?.collections,
+      incomeExpense: !!user.permissions?.incomeExpense,
+      inkSuppliers: !!user.permissions?.inkSuppliers,
+      employees: !!user.permissions?.employees,
+      attendance: !!user.permissions?.attendance,
+      combinedAttendance: !!user.permissions?.combinedAttendance,
+      payroll: !!user.permissions?.payroll,
+      cutting: !!user.permissions?.cutting,
+      putti: !!user.permissions?.putti,
+      reports: !!user.permissions?.reports,
+      dataMgmt: !!user.permissions?.dataMgmt,
+      settings: !!user.permissions?.settings,
+      userAccess: !!user.permissions?.userAccess,
+    };
+    setStaffPerms(p);
+    setStaffError('');
     setIsStaffModalOpen(true);
   };
 
   const handleSaveStaffUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setStaffError('');
+
+    if (editingStaffTarget && !staffPassword.trim()) {
+      updateUserAccess(
+        editingStaffTarget.uid,
+        {
+          displayName: staffName.trim() || editingStaffTarget.displayName,
+          role: staffRole,
+          status: staffStatusField,
+          isReadOnly: staffRole === 'viewer' ? true : staffReadOnly,
+          permissions: staffPerms,
+        },
+        editingStaffTarget.businessId || staffBizId
+      );
+      setIsStaffModalOpen(false);
+      setEditingStaffTarget(null);
+      setSavedNotice(`"${staffName.trim() || editingStaffTarget.displayName}"-এর এক্সেস ও অনুমতি আপডেট হয়েছে!`);
+      setTimeout(() => setSavedNotice(''), 5000);
+      return;
+    }
+
     setSavingStaff(true);
     try {
       const res = await provisionStaffUser({
         businessId: staffBizId,
         displayName: staffName,
-        identifier: staffIdentifier,
-        password: staffPassword,
+        identifier: editingStaffTarget
+          ? editingStaffTarget.loginUsername || editingStaffTarget.email
+          : staffIdentifier,
+        password: staffPassword.trim(),
         role: staffRole,
         isReadOnly: staffReadOnly,
         permissions: staffPerms,
-        status: 'approved',
+        status: staffStatusField,
+        existingUid: editingStaffTarget?.uid,
+        oldAssignedPassword: editingStaffTarget?.assignedPassword,
       });
       if (!res.success) {
         setStaffError(res.error || 'ইউজার তৈরি করা যায়নি।');
@@ -314,8 +392,11 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
       }
       const chosenBiz = (saasRegistry.businesses || []).find((b) => b.id === staffBizId);
       setIsStaffModalOpen(false);
+      setEditingStaffTarget(null);
       setSavedNotice(
-        `"${chosenBiz?.name || 'নির্বাচিত প্রেস'}"-এর জন্য নতুন ইউজার "${staffName.trim()}" (${staffIdentifier.trim()}) সফলভাবে সেট করা হয়েছে!`
+        editingStaffTarget
+          ? `"${staffName.trim()}" এর পাসওয়ার্ড ও এক্সেস আপডেট হয়েছে!`
+          : `"${chosenBiz?.name || 'নির্বাচিত প্রেস'}"-এর জন্য নতুন ইউজার "${staffName.trim()}" (${staffIdentifier.trim()}) সফলভাবে সেট করা হয়েছে!`
       );
       setTimeout(() => setSavedNotice(''), 6000);
     } finally {
@@ -351,6 +432,24 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
   const businesses = saasRegistry.businesses || [];
   const paymentRequests = saasRegistry.paymentRequests || [];
   const pendingPaymentRequests = paymentRequests.filter((r) => r.status === 'pending');
+
+  const allStaffUsers = React.useMemo(() => {
+    const map = new Map<string, AppUserAccess>();
+    const addEntry = (u: AppUserAccess, fallbackBizId: string) => {
+      const cleanEmail = (u.email || '').toLowerCase().trim();
+      if (cleanEmail === 'fileb2027@gmail.com') return;
+      const bizId = u.businessId || fallbackBizId;
+      const key = `${bizId}::${cleanEmail || u.uid}`;
+      const normalized: AppUserAccess = { ...u, businessId: bizId };
+      const prev = map.get(key);
+      map.set(key, prev ? { ...prev, ...normalized } : normalized);
+    };
+    (db.userAccessList || []).forEach((u) => addEntry(u, activeBusinessId));
+    (saasRegistry.staffAccounts || []).forEach((u) => addEntry(u, DEFAULT_BUSINESS_ID));
+    return Array.from(map.values());
+  }, [db.userAccessList, saasRegistry.staffAccounts, activeBusinessId]);
+
+  const pendingStaffUsers = allStaffUsers.filter((u) => u.status === 'pending');
 
   const filteredBusinesses = businesses.filter((b) => {
     const q = search.trim().toLowerCase();
@@ -698,6 +797,22 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
           <span>ফ্রি ট্রায়াল, প্যাকেজ, পেমেন্ট মেথড ও মডিউল</span>
         </button>
         <button
+          onClick={() => setSubTab('staff-accounts')}
+          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center space-x-2 transition ${
+            subTab === 'staff-accounts'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <ShieldCheck className="w-4 h-4" />
+          <span>স্টাফ ও ইউজার এক্সেস ({allStaffUsers.length})</span>
+          {pendingStaffUsers.length > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black animate-pulse">
+              অপেক্ষমান: {pendingStaffUsers.length}
+            </span>
+          )}
+        </button>
+        <button
           onClick={() => setSubTab('party-accounts')}
           className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center space-x-2 transition ${
             subTab === 'party-accounts'
@@ -712,6 +827,125 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
 
       {subTab === 'businesses' && (
         <div className="space-y-4">
+          {/* Pending Staff Approval Requests Banner */}
+          {pendingStaffUsers.length > 0 && (
+            <div className="rounded-2xl p-4 sm:p-5 border border-amber-300 bg-amber-50/80 shadow-xs space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center space-x-2">
+                  <Clock className="w-5 h-5 text-amber-600" />
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900">
+                    স্টাফ / ব্যবহারকারী অনুমোদনের অনুরোধ
+                  </h2>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[11px] font-bold">
+                    {pendingStaffUsers.length} জন অপেক্ষমান
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStaffStatusFilter('pending');
+                    setSubTab('staff-accounts');
+                  }}
+                  className="text-xs font-bold text-indigo-700 hover:underline"
+                >
+                  সব স্টাফ তালিকা দেখুন →
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                {pendingStaffUsers.map((stUser) => {
+                  const bizObj = businesses.find((b) => b.id === stUser.businessId);
+                  return (
+                    <div
+                      key={`${stUser.businessId}_${stUser.uid}_${stUser.email}`}
+                      className="p-3.5 rounded-xl border border-amber-300 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-900 truncate">
+                          {stUser.displayName || 'ব্যবহারকারী'}
+                        </p>
+                        <p className="text-[11px] font-mono text-slate-600 truncate">
+                          {stUser.loginUsername ? `${stUser.loginUsername} • ` : ''}
+                          {stUser.email}
+                        </p>
+                        <p className="text-[11px] text-indigo-700 font-semibold mt-0.5">
+                          প্রেস: {bizObj?.name || 'মক্কা প্রিন্টার্স'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updateUserAccess(
+                              stUser.uid,
+                              {
+                                status: 'approved',
+                                role: stUser.role === 'custom' ? 'operator' : stUser.role,
+                                permissions:
+                                  stUser.permissions &&
+                                  Object.values(stUser.permissions).some(Boolean)
+                                    ? stUser.permissions
+                                    : {
+                                        dashboard: true,
+                                        parties: false,
+                                        books: true,
+                                        production: true,
+                                        plates: true,
+                                        paperStock: true,
+                                        billing: false,
+                                        collections: false,
+                                        incomeExpense: false,
+                                        inkSuppliers: false,
+                                        employees: false,
+                                        attendance: false,
+                                        combinedAttendance: false,
+                                        payroll: false,
+                                        cutting: true,
+                                        putti: false,
+                                        reports: false,
+                                        dataMgmt: false,
+                                        settings: false,
+                                        userAccess: false,
+                                      },
+                              },
+                              stUser.businessId
+                            );
+                            setSavedNotice(
+                              `"${stUser.displayName || stUser.email}" কে অনুমোদন দেওয়া হয়েছে!`
+                            );
+                            setTimeout(() => setSavedNotice(''), 5000);
+                          }}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold shadow-xs transition"
+                        >
+                          অনুমোদন করুন
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openEditStaffModal(stUser)}
+                          className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg font-bold transition"
+                        >
+                          মডিউল সেট
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateUserAccess(
+                              stUser.uid,
+                              { status: 'rejected' },
+                              stUser.businessId
+                            )
+                          }
+                          className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg font-bold transition"
+                        >
+                          স্থগিত
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {/* Pending Payment Requests Card */}
           {paymentRequests.length > 0 && (
             <div
@@ -1046,6 +1280,310 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
               </tbody>
             </table>
           </div>
+          </div>
+        </div>
+      )}
+
+      {subTab === 'staff-accounts' && (
+        <div className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200 shadow-xs space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-indigo-600" />
+                <span>সকল প্রেসের স্টাফ ও ব্যবহারকারী (সুপার এডমিন কন্ট্রোল)</span>
+              </h2>
+              <p className="text-xs text-slate-500">
+                অপেক্ষমান ব্যবহারকারীদের ১ ক্লিকে অনুমোদন দিন অথবা যেকোনো প্রেসের স্টাফের আইডি, পাসওয়ার্ড ও মডিউল পরিবর্তন করুন
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => openStaffProvisionModal()}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition shrink-0"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>+ নতুন ইউজার ও পাসওয়ার্ড তৈরি</span>
+            </button>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between text-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={staffSearch}
+                  onChange={(e) => setStaffSearch(e.target.value)}
+                  placeholder="নাম, ইউজারনেম বা ইমেইল..."
+                  className="pl-8 pr-3 py-2 border border-slate-300 rounded-xl focus:outline-indigo-500"
+                />
+              </div>
+              <select
+                value={staffBizFilter}
+                onChange={(e) => setStaffBizFilter(e.target.value)}
+                className="px-3 py-2 border border-slate-300 rounded-xl font-bold bg-white"
+              >
+                <option value="all">সকল প্রেস ({businesses.length})</option>
+                {businesses.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5 font-bold">
+              {(
+                [
+                  { id: 'all', label: `সব (${allStaffUsers.length})` },
+                  { id: 'pending', label: `অপেক্ষমান (${pendingStaffUsers.length})` },
+                  {
+                    id: 'approved',
+                    label: `অনুমোদিত (${allStaffUsers.filter((u) => u.status === 'approved').length})`,
+                  },
+                  {
+                    id: 'rejected',
+                    label: `স্থগিত (${allStaffUsers.filter((u) => u.status === 'rejected').length})`,
+                  },
+                ] as const
+              ).map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setStaffStatusFilter(f.id)}
+                  className={`px-3 py-1.5 rounded-xl border transition ${
+                    staffStatusFilter === f.id
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
+              <thead className="bg-slate-50 text-slate-700 font-bold border-b">
+                <tr>
+                  <th className="p-3">ব্যবহারকারী</th>
+                  <th className="p-3">প্রেস প্রতিষ্ঠান</th>
+                  <th className="p-3">লগইন আইডি / ইমেইল ও পাসওয়ার্ড</th>
+                  <th className="p-3 text-center">অবস্থা</th>
+                  <th className="p-3 text-center">রোল ও মডিউল</th>
+                  <th className="p-3 text-right">অ্যাকশন</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {(() => {
+                  const q = staffSearch.trim().toLowerCase();
+                  const filtered = allStaffUsers.filter((u) => {
+                    if (staffBizFilter !== 'all' && u.businessId !== staffBizFilter) return false;
+                    if (staffStatusFilter !== 'all' && u.status !== staffStatusFilter) return false;
+                    if (!q) return true;
+                    const bizName = businesses.find((b) => b.id === u.businessId)?.name || '';
+                    return (
+                      (u.displayName || '').toLowerCase().includes(q) ||
+                      (u.email || '').toLowerCase().includes(q) ||
+                      (u.loginUsername || '').toLowerCase().includes(q) ||
+                      bizName.toLowerCase().includes(q)
+                    );
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={6} className="p-8 text-center text-slate-400">
+                          কোনো স্টাফ বা ব্যবহারকারী পাওয়া যায়নি।
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return filtered.map((u) => {
+                    const bizObj = businesses.find((b) => b.id === u.businessId);
+                    const pwdKey = `staff_${u.businessId}_${u.uid}_${u.email}`;
+                    const showPwd = !!visiblePwdMap[pwdKey];
+                    const modCount = u.permissions
+                      ? Object.values(u.permissions).filter(Boolean).length
+                      : 0;
+
+                    return (
+                      <tr key={pwdKey} className="hover:bg-slate-50">
+                        <td className="p-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center shrink-0">
+                              {(u.displayName || u.email || 'U')[0].toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-bold text-slate-900 truncate">
+                                {u.displayName || 'নামহীন'}
+                              </p>
+                              <p className="text-[11px] text-slate-400">
+                                {formatDate(u.requestedAt?.split('T')[0] || '')}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-3 font-semibold text-indigo-800">
+                          {bizObj?.name || 'মক্কা প্রিন্টার্স'}
+                        </td>
+                        <td className="p-3">
+                          {u.loginUsername && (
+                            <div className="inline-block px-2 py-0.5 mb-0.5 rounded bg-indigo-50 text-indigo-800 font-mono font-bold text-[11px]">
+                              আইডি: {u.loginUsername}
+                            </div>
+                          )}
+                          <div className="font-mono text-[11px] text-slate-600">{u.email}</div>
+                          {u.assignedPassword && (
+                            <div className="flex items-center gap-1.5 text-[11px] text-slate-600 mt-0.5">
+                              <span>পাসওয়ার্ড:</span>
+                              <span className="font-mono font-bold text-slate-900">
+                                {showPwd ? u.assignedPassword : '••••••'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setVisiblePwdMap((prev) => ({
+                                    ...prev,
+                                    [pwdKey]: !prev[pwdKey],
+                                  }))
+                                }
+                                className="text-slate-400 hover:text-indigo-600"
+                              >
+                                {showPwd ? (
+                                  <EyeOff className="w-3.5 h-3.5" />
+                                ) : (
+                                  <Eye className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-3 text-center whitespace-nowrap">
+                          {u.status === 'approved' ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[11px] bg-emerald-100 text-emerald-800">
+                              <UserCheck className="w-3.5 h-3.5" />
+                              <span>অনুমোদিত</span>
+                            </span>
+                          ) : u.status === 'pending' ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[11px] bg-amber-100 text-amber-800 animate-pulse">
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>অপেক্ষমান</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[11px] bg-rose-100 text-rose-800">
+                              <UserX className="w-3.5 h-3.5" />
+                              <span>স্থগিত</span>
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 text-center whitespace-nowrap">
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-700 font-bold rounded-md text-[11px] block w-fit mx-auto">
+                            {u.role === 'super_admin'
+                              ? 'সুপার অ্যাডমিন'
+                              : u.role === 'admin'
+                              ? 'অ্যাডমিন'
+                              : u.role === 'manager'
+                              ? 'ম্যানেজার'
+                              : u.role === 'accountant'
+                              ? 'হিসাবরক্ষক'
+                              : u.role === 'operator'
+                              ? 'অপারেটর'
+                              : u.role === 'viewer'
+                              ? 'দর্শক (Viewer)'
+                              : 'কাস্টম'}
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-semibold">
+                            {modCount} টি মডিউল
+                          </span>
+                        </td>
+                        <td className="p-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {u.status !== 'approved' ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateUserAccess(
+                                    u.uid,
+                                    {
+                                      status: 'approved',
+                                      role: u.role === 'custom' ? 'operator' : u.role,
+                                      permissions:
+                                        u.permissions &&
+                                        Object.values(u.permissions).some(Boolean)
+                                          ? u.permissions
+                                          : {
+                                              dashboard: true,
+                                              parties: false,
+                                              books: true,
+                                              production: true,
+                                              plates: true,
+                                              paperStock: true,
+                                              billing: false,
+                                              collections: false,
+                                              incomeExpense: false,
+                                              inkSuppliers: false,
+                                              employees: false,
+                                              attendance: false,
+                                              combinedAttendance: false,
+                                              payroll: false,
+                                              cutting: true,
+                                              putti: false,
+                                              reports: false,
+                                              dataMgmt: false,
+                                              settings: false,
+                                              userAccess: false,
+                                            },
+                                    },
+                                    u.businessId
+                                  );
+                                  setSavedNotice(
+                                    `"${u.displayName || u.email}" অনুমোদন করা হয়েছে!`
+                                  );
+                                  setTimeout(() => setSavedNotice(''), 5000);
+                                }}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px]"
+                              >
+                                অনুমোদন
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateUserAccess(u.uid, { status: 'rejected' }, u.businessId)
+                                }
+                                className="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg font-bold text-[11px]"
+                              >
+                                স্থগিত
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => openEditStaffModal(u)}
+                              className="p-1.5 bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-800 rounded-lg"
+                              title="রোল, মডিউল ও পাসওয়ার্ড পরিবর্তন"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteStaffTarget(u)}
+                              className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg"
+                              title="মুছে ফেলুন"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -2031,16 +2569,23 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
-                    সুপার এডমিন: ইউজারনেম, পাসওয়ার্ড ও দায়িত্ব সেট করুন
+                    {editingStaffTarget
+                      ? `এক্সেস ও পাসওয়ার্ড সম্পাদনা: ${editingStaffTarget.displayName}`
+                      : 'সুপার এডমিন: ইউজারনেম, পাসওয়ার্ড ও দায়িত্ব সেট করুন'}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    যেকোনো প্রেসের জন্য ইউজার আইডি/ইমেইল ও পাসওয়ার্ড তৈরি করুন — কর্মচারী সরাসরি লগইন করে নির্ধারিত দায়িত্ব পালন করবেন
+                    {editingStaffTarget
+                      ? editingStaffTarget.email
+                      : 'যেকোনো প্রেসের জন্য ইউজার আইডি/ইমেইল ও পাসওয়ার্ড তৈরি করুন — কর্মচারী সরাসরি লগইন করে নির্ধারিত দায়িত্ব পালন করবেন'}
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setIsStaffModalOpen(false)}
+                onClick={() => {
+                  setIsStaffModalOpen(false);
+                  setEditingStaffTarget(null);
+                }}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
               >
                 <X className="w-5 h-5" />
@@ -2054,13 +2599,16 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
             )}
 
             <form onSubmit={handleSaveStaffUser} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">প্রেস / দোকান নির্বাচন করুন *</label>
                   <select
                     value={staffBizId}
+                    disabled={!!editingStaffTarget}
                     onChange={(e) => setStaffBizId(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white font-bold focus:outline-indigo-500"
+                    className={`w-full px-3 py-2 border border-slate-300 rounded-xl font-bold focus:outline-indigo-500 ${
+                      editingStaffTarget ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                    }`}
                   >
                     {businesses.map((b) => (
                       <option key={b.id} value={b.id}>
@@ -2086,6 +2634,19 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
                     <option value="custom">কাস্টম (নিজে নির্বাচন করুন)</option>
                   </select>
                 </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">অবস্থা (Status)</label>
+                  <select
+                    value={staffStatusField}
+                    onChange={(e) => setStaffStatusField(e.target.value as AppUserAccess['status'])}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white font-bold focus:outline-indigo-500"
+                  >
+                    <option value="approved">অনুমোদিত (সরাসরি লগইন)</option>
+                    <option value="pending">অপেক্ষমান (Pending)</option>
+                    <option value="rejected">স্থগিত (Suspended)</option>
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-indigo-50/50 p-3.5 rounded-xl border border-indigo-200/80">
@@ -2106,23 +2667,28 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
                   <input
                     type="text"
                     required
+                    disabled={!!editingStaffTarget}
                     value={staffIdentifier}
                     onChange={(e) => setStaffIdentifier(e.target.value)}
                     placeholder="karim1 বা mail@gmail.com"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white font-mono font-bold focus:outline-indigo-500"
+                    className={`w-full px-3 py-2 border border-slate-300 rounded-xl font-mono font-bold focus:outline-indigo-500 ${
+                      editingStaffTarget ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                    }`}
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">পাসওয়ার্ড * (কমপক্ষে ৬ অক্ষর)</label>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    {editingStaffTarget ? 'নতুন পাসওয়ার্ড (ঐচ্ছিক)' : 'পাসওয়ার্ড * (কমপক্ষে ৬ অক্ষর)'}
+                  </label>
                   <div className="relative">
                     <input
                       type={showStaffPwd ? 'text' : 'password'}
-                      required
-                      minLength={6}
+                      required={!editingStaffTarget}
+                      minLength={editingStaffTarget ? undefined : 6}
                       value={staffPassword}
                       onChange={(e) => setStaffPassword(e.target.value)}
-                      placeholder="কমপক্ষে ৬ অক্ষর"
+                      placeholder={editingStaffTarget ? 'পরিবর্তন করতে লিখুন...' : 'কমপক্ষে ৬ অক্ষর'}
                       className="w-full pl-3 pr-9 py-2 border border-slate-300 rounded-xl bg-white font-bold focus:outline-indigo-500"
                     />
                     <button
@@ -2221,7 +2787,10 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setIsStaffModalOpen(false)}
+                  onClick={() => {
+                    setIsStaffModalOpen(false);
+                    setEditingStaffTarget(null);
+                  }}
                   className="px-4 py-2 border border-slate-300 rounded-xl font-bold text-slate-700"
                 >
                   বাতিল
@@ -2232,7 +2801,13 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
                   className="inline-flex items-center space-x-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl font-bold shadow-md"
                 >
                   <Save className="w-4 h-4" />
-                  <span>{savingStaff ? 'তৈরি হচ্ছে...' : 'ইউজার ও পাসওয়ার্ড সেট করুন'}</span>
+                  <span>
+                    {savingStaff
+                      ? 'সংরক্ষণ হচ্ছে...'
+                      : editingStaffTarget
+                      ? 'পরিবর্তন সংরক্ষণ করুন'
+                      : 'ইউজার ও পাসওয়ার্ড সেট করুন'}
+                  </span>
                 </button>
               </div>
             </form>
@@ -2389,6 +2964,20 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
           setDeletePartyAccTarget(null);
         }}
         onCancel={() => setDeletePartyAccTarget(null)}
+      />
+
+      {/* Delete Staff User Confirm */}
+      <ConfirmModal
+        isOpen={!!deleteStaffTarget}
+        title="ব্যবহারকারী মুছে ফেলুন"
+        message={`আপনি কি "${deleteStaffTarget?.displayName}" (${deleteStaffTarget?.email}) এর অ্যাক্সেস মুছে ফেলতে চান?`}
+        onConfirm={() => {
+          if (deleteStaffTarget) {
+            deleteUserAccess(deleteStaffTarget.uid, deleteStaffTarget.businessId);
+          }
+          setDeleteStaffTarget(null);
+        }}
+        onCancel={() => setDeleteStaffTarget(null)}
       />
     </div>
   );

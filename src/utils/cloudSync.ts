@@ -128,6 +128,7 @@ export function createDefaultSaaSRegistry(defaultShopName: string = 'মক্�
     businesses: [flagship],
     paymentRequests: [],
     partyAccounts: [],
+    staffAccounts: [],
     updatedAt: now,
   };
 }
@@ -495,7 +496,7 @@ export async function pushSaaSRegistryToCloud(
   registry: SaaSRegistryState,
   force: boolean = false
 ): Promise<boolean> {
-  if (isCloudQuotaExhausted()) return false;
+  if (!force && isCloudQuotaExhausted()) return false;
 
   const docPath = `businesses/${SAAS_REGISTRY_DOC_ID}`;
   try {
@@ -512,6 +513,9 @@ export async function pushSaaSRegistryToCloud(
       ...registry,
       updatedAt: now,
     });
+    if (isCloudQuotaExhausted()) {
+      resetQuotaExhaustedState();
+    }
     return true;
   } catch (err) {
     if (isQuotaExhaustedError(err)) {

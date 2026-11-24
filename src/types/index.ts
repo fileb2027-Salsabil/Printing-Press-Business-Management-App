@@ -695,6 +695,7 @@ export interface SaaSRegistryState {
   businesses: RegisteredBusiness[];
   paymentRequests?: SubscriptionPaymentRequest[];
   partyAccounts?: PartyPortalAccount[];
+  staffAccounts?: AppUserAccess[];
   updatedAt: string;
 }
 

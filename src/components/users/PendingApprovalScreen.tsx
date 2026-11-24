@@ -109,6 +109,16 @@ export const PendingApprovalScreen: React.FC = () => {
             <span>লগআউট করুন</span>
           </button>
         </div>
+
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={() => logout()}
+            className="text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline transition"
+          >
+            অ্যাডমিন প্যানেলে লগইন করতে চান? লগআউট করে অ্যাডমিন অ্যাকাউন্ট দিয়ে প্রবেশ করুন →
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -274,14 +274,37 @@ const AppContent: React.FC = () => {
     logout,
   } = useDatabase();
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [wantsAdminRoute, setWantsAdminRoute] = useState<boolean>(() =>
+    typeof window !== 'undefined' && /^\/(admin|saas-admin)(\/|$)/i.test(window.location.pathname)
+  );
   const [focusedPartyId, setFocusedPartyId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Automatically redirect user to their first permitted tab if activeTab is inaccessible
   // (e.g., an Attendance-only operator immediately lands on 'attendance', not blank 'dashboard')
   useEffect(() => {
-    if (!isReady || !currentUser) return;
+    if (!isReady || !currentUser || !authResolved || isCloudHydrating) return;
     if (!isMainAdmin && currentUserAccess?.status !== 'approved') return;
+
+    if (wantsAdminRoute) {
+      setWantsAdminRoute(false);
+      if (typeof window !== 'undefined' && /^\/(admin|saas-admin)(\/|$)/i.test(window.location.pathname)) {
+        try {
+          window.history.replaceState({}, '', '/');
+        } catch {
+          // ignore
+        }
+      }
+      if (isMainAdmin) {
+        setActiveTab('saas-admin');
+        return;
+      }
+      if (currentUserAccess?.role === 'super_admin' || currentUserAccess?.role === 'admin') {
+        setActiveTab('user-access');
+        return;
+      }
+    }
+
     if (activeTab === 'subscription') return;
 
     const isAdminRoute =
@@ -305,7 +328,17 @@ const AppContent: React.FC = () => {
         setActiveTab(firstAllowed.tab);
       }
     }
-  }, [isReady, currentUser, isMainAdmin, currentUserAccess, activeTab, canAccessModule]);
+  }, [
+    isReady,
+    authResolved,
+    isCloudHydrating,
+    currentUser,
+    isMainAdmin,
+    currentUserAccess,
+    activeTab,
+    wantsAdminRoute,
+    canAccessModule,
+  ]);
 
   const hasExistingRecords = Boolean(
     (db.parties?.length || 0) > 0 ||
@@ -610,7 +643,7 @@ const AppContent: React.FC = () => {
                   setActiveTab(firstFree ? firstFree.tab : 'dashboard');
                 }}
               />
-            ) : isAdminTab && !isAdminPanelUnlocked ? (
+            ) : !isMainAdmin && isAdminTab && !isAdminPanelUnlocked ? (
               <AdminLockedScreen />
             ) : isPaidLockedCurrentTab ? (
               <SubscriptionPaywallScreen

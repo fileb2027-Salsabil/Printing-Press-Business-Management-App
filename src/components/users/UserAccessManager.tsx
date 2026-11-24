@@ -58,8 +58,16 @@ const MODULES_CONFIG: ModuleConfig[] = [
 ];
 
 export const UserAccessManager: React.FC = () => {
-  const { db, currentUser, isMainAdmin, updateUserAccess, deleteUserAccess, provisionStaffUser } =
-    useDatabase();
+  const {
+    db,
+    saasRegistry,
+    activeBusinessId,
+    currentUser,
+    isMainAdmin,
+    updateUserAccess,
+    deleteUserAccess,
+    provisionStaffUser,
+  } = useDatabase();
 
   const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<AppUserAccess | null>(null);
@@ -108,7 +116,22 @@ export const UserAccessManager: React.FC = () => {
     userAccess: false,
   });
 
-  const usersList = db.userAccessList || [];
+  const usersList = React.useMemo(() => {
+    const localList = db.userAccessList || [];
+    const regList = (saasRegistry.staffAccounts || []).filter(
+      (u) => !u.businessId || u.businessId === activeBusinessId
+    );
+    const map = new Map<string, AppUserAccess>();
+    for (const u of localList) {
+      map.set((u.email || u.uid).toLowerCase().trim(), u);
+    }
+    for (const u of regList) {
+      const key = (u.email || u.uid).toLowerCase().trim();
+      const prev = map.get(key);
+      map.set(key, prev ? { ...prev, ...u } : u);
+    }
+    return Array.from(map.values());
+  }, [db.userAccessList, saasRegistry.staffAccounts, activeBusinessId]);
 
   const filteredUsers = usersList.filter(
     (u) =>

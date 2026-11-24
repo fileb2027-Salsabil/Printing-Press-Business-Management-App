@@ -330,8 +330,8 @@ interface DatabaseContextType {
   currentUserAccess: AppUserAccess | null;
   isMainAdmin: boolean;
   canAccessModule: (module: AppPermissionModule) => boolean;
-  updateUserAccess: (uid: string, updates: Partial<AppUserAccess>) => void;
-  deleteUserAccess: (uid: string) => boolean;
+  updateUserAccess: (uid: string, updates: Partial<AppUserAccess>, targetBusinessId?: string) => void;
+  deleteUserAccess: (uid: string, targetBusinessId?: string) => boolean;
   provisionStaffUser: (input: {
     displayName: string;
     identifier: string;
@@ -505,6 +505,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           businesses: parsed.businesses?.length ? parsed.businesses : createDefaultSaaSRegistry().businesses,
           paymentRequests: Array.isArray(parsed.paymentRequests) ? parsed.paymentRequests : [],
           partyAccounts: Array.isArray(parsed.partyAccounts) ? parsed.partyAccounts : [],
+          staffAccounts: Array.isArray(parsed.staffAccounts) ? parsed.staffAccounts : [],
           updatedAt: parsed.updatedAt || new Date().toISOString(),
         };
       }
@@ -802,6 +803,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         businesses: mergedBusinesses,
         paymentRequests: Array.isArray(data.paymentRequests) ? data.paymentRequests : [],
         partyAccounts: Array.isArray(data.partyAccounts) ? data.partyAccounts : [],
+        staffAccounts: Array.isArray(data.staffAccounts) ? data.staffAccounts : [],
         updatedAt: data.updatedAt || new Date().toISOString(),
       });
     };
@@ -1072,12 +1074,19 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return;
     }
 
+    const staffAccountsList = saasRegistry.staffAccounts || [];
+    const userMatchesBiz = (b: RegisteredBusiness) =>
+      b.ownerEmail?.toLowerCase().trim() === email ||
+      b.ownerUid === currentUser.uid ||
+      (b.memberEmails || []).some((m) => m.toLowerCase().trim() === email) ||
+      staffAccountsList.some(
+        (s) =>
+          (s.businessId || DEFAULT_BUSINESS_ID) === b.id &&
+          (s.uid === currentUser.uid || s.email.toLowerCase().trim() === email)
+      );
+
     const currentBiz = saasRegistry.businesses.find((b) => b.id === activeBusinessId);
-    const belongsToCurrent =
-      currentBiz &&
-      (currentBiz.ownerEmail?.toLowerCase().trim() === email ||
-        currentBiz.ownerUid === currentUser.uid ||
-        (currentBiz.memberEmails || []).some((m) => m.toLowerCase().trim() === email));
+    const belongsToCurrent = currentBiz && userMatchesBiz(currentBiz);
 
     if (belongsToCurrent && currentBiz) {
       // Automatically unlock the user's matched business on login (only switching shops in Switcher prompts password)
@@ -1087,12 +1096,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return;
     }
 
-    const matchingBusinesses = saasRegistry.businesses.filter(
-      (b) =>
-        b.ownerEmail?.toLowerCase().trim() === email ||
-        b.ownerUid === currentUser.uid ||
-        (b.memberEmails || []).some((m) => m.toLowerCase().trim() === email)
-    );
+    const matchingBusinesses = saasRegistry.businesses.filter(userMatchesBiz);
     const ownBiz =
       matchingBusinesses.find((b) => b.id !== DEFAULT_BUSINESS_ID && b.status === 'approved') ||
       matchingBusinesses.find((b) => b.id !== DEFAULT_BUSINESS_ID) ||
@@ -1116,6 +1120,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     isRegistrySyncing,
     saasRegistry.businesses,
     saasRegistry.partyAccounts,
+    saasRegistry.staffAccounts,
     activeBusinessId,
     unlockedBusinessIds,
   ]);
@@ -1135,20 +1140,22 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
     if (email.endsWith('@party.makkahprinters.local')) return false;
 
+    const staffAccountsList = saasRegistry.staffAccounts || [];
+    const userMatchesBiz = (b: RegisteredBusiness) =>
+      b.ownerEmail?.toLowerCase().trim() === email ||
+      b.ownerUid === currentUser.uid ||
+      (b.memberEmails || []).some((m) => m.toLowerCase().trim() === email) ||
+      staffAccountsList.some(
+        (s) =>
+          (s.businessId || DEFAULT_BUSINESS_ID) === b.id &&
+          (s.uid === currentUser.uid || s.email.toLowerCase().trim() === email)
+      );
+
     const currentBiz = saasRegistry.businesses.find((b) => b.id === activeBusinessId);
-    const belongsToCurrent =
-      currentBiz &&
-      (currentBiz.ownerEmail?.toLowerCase().trim() === email ||
-        currentBiz.ownerUid === currentUser.uid ||
-        (currentBiz.memberEmails || []).some((m) => m.toLowerCase().trim() === email));
+    const belongsToCurrent = currentBiz && userMatchesBiz(currentBiz);
     if (belongsToCurrent && currentBiz) return false;
 
-    const matchingBusinesses = saasRegistry.businesses.filter(
-      (b) =>
-        b.ownerEmail?.toLowerCase().trim() === email ||
-        b.ownerUid === currentUser.uid ||
-        (b.memberEmails || []).some((m) => m.toLowerCase().trim() === email)
-    );
+    const matchingBusinesses = saasRegistry.businesses.filter(userMatchesBiz);
     const ownBiz =
       matchingBusinesses.find((b) => b.id !== DEFAULT_BUSINESS_ID && b.status === 'approved') ||
       matchingBusinesses.find((b) => b.id !== DEFAULT_BUSINESS_ID) ||
@@ -1161,6 +1168,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     isRegistrySyncing,
     saasRegistry.businesses,
     saasRegistry.partyAccounts,
+    saasRegistry.staffAccounts,
     activeBusinessId,
   ]);
 
@@ -3049,11 +3057,17 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!currentUser) return [];
     if (isMainAdmin) return saasRegistry.businesses;
     const email = (currentUser.email || '').toLowerCase().trim();
+    const staffAccountsList = saasRegistry.staffAccounts || [];
     const list = saasRegistry.businesses.filter(
       (b) =>
         b.ownerEmail?.toLowerCase().trim() === email ||
         b.ownerUid === currentUser.uid ||
-        (b.memberEmails || []).some((m) => m.toLowerCase().trim() === email)
+        (b.memberEmails || []).some((m) => m.toLowerCase().trim() === email) ||
+        staffAccountsList.some(
+          (s) =>
+            (s.businessId || DEFAULT_BUSINESS_ID) === b.id &&
+            (s.uid === currentUser.uid || s.email.toLowerCase().trim() === email)
+        )
     );
     // Fallback to flagship business if user is logged into it without any registered shop
     if (list.length === 0) {
@@ -3061,7 +3075,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return flagship ? [flagship] : [];
     }
     return list;
-  }, [currentUser, isMainAdmin, saasRegistry.businesses]);
+  }, [currentUser, isMainAdmin, saasRegistry.businesses, saasRegistry.staffAccounts]);
 
   const currentUserAccess = useMemo<AppUserAccess | null>(() => {
     if (!currentUser) return null;
@@ -3116,12 +3130,33 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       };
     }
 
+    const regMatches = (saasRegistry.staffAccounts || []).filter(
+      (u) =>
+        (!u.businessId || u.businessId === activeBusinessId) &&
+        (u.uid === currentUser.uid || u.email.toLowerCase().trim() === email)
+    );
+    if (regMatches.length > 0) {
+      return (
+        regMatches.find((u) => u.status === 'approved' && u.uid === currentUser.uid) ||
+        regMatches.find((u) => u.status === 'approved') ||
+        regMatches.find((u) => u.uid === currentUser.uid) ||
+        regMatches[0]
+      );
+    }
+
     const found = (db.userAccessList || []).find(
       (u) => u.uid === currentUser.uid || u.email.toLowerCase().trim() === email
     );
 
     return found || null;
-  }, [currentUser, db.userAccessList, db.settings.adminEmail, currentBusiness, activeBusinessId]);
+  }, [
+    currentUser,
+    db.userAccessList,
+    saasRegistry.staffAccounts,
+    db.settings.adminEmail,
+    currentBusiness,
+    activeBusinessId,
+  ]);
 
   const currentPartyAccount = useMemo<PartyPortalAccount | null>(() => {
     if (!currentUser) return null;
@@ -3170,15 +3205,24 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const email = (currentUser.email || '').toLowerCase().trim();
     const isSuperAdminEmail = email === MAIN_SUPER_ADMIN_EMAIL.toLowerCase();
 
+    const staffAccountsList = saasRegistryRef.current.staffAccounts || [];
+
     // Never auto-register as pending in DEFAULT_BUSINESS_ID when user owns/belongs to another business
     if (!isSuperAdminEmail && activeBusinessId === DEFAULT_BUSINESS_ID) {
-      const belongsToOtherBiz = saasRegistryRef.current.businesses.some(
-        (b) =>
-          b.id !== DEFAULT_BUSINESS_ID &&
-          (b.ownerEmail?.toLowerCase().trim() === email ||
-            b.ownerUid === currentUser.uid ||
-            (b.memberEmails || []).some((m) => m.toLowerCase().trim() === email))
-      );
+      const belongsToOtherBiz =
+        saasRegistryRef.current.businesses.some(
+          (b) =>
+            b.id !== DEFAULT_BUSINESS_ID &&
+            (b.ownerEmail?.toLowerCase().trim() === email ||
+              b.ownerUid === currentUser.uid ||
+              (b.memberEmails || []).some((m) => m.toLowerCase().trim() === email))
+        ) ||
+        staffAccountsList.some(
+          (s) =>
+            s.businessId &&
+            s.businessId !== DEFAULT_BUSINESS_ID &&
+            (s.uid === currentUser.uid || s.email.toLowerCase().trim() === email)
+        );
       if (belongsToOtherBiz) return;
     }
 
@@ -3193,6 +3237,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       activeBusinessId === DEFAULT_BUSINESS_ID && adminEmail && email === adminEmail
     );
     const autoApprove = isSuperAdminEmail || isShopOwner || isFlagshipAdmin;
+
+    const regStaffMatch = staffAccountsList.find(
+      (u) =>
+        (!u.businessId || u.businessId === activeBusinessId) &&
+        (u.uid === currentUser.uid || u.email.toLowerCase().trim() === email)
+    );
+
+    let entryToMirrorInRegistry: AppUserAccess | null = null;
 
     setDb((prev) => {
       const list = prev.userAccessList || [];
@@ -3232,7 +3284,42 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           };
           return { ...prev, userAccessList: updated };
         }
+        if (
+          regStaffMatch &&
+          (regStaffMatch.status !== list[index].status ||
+            regStaffMatch.role !== list[index].role ||
+            regStaffMatch.uid !== list[index].uid)
+        ) {
+          const updated = [...list];
+          updated[index] = {
+            ...list[index],
+            ...regStaffMatch,
+            uid: currentUser.uid,
+            photoURL: currentUser.photoURL || list[index].photoURL || regStaffMatch.photoURL,
+            businessId: activeBusinessId,
+          };
+          return { ...prev, userAccessList: updated };
+        }
+        if (!regStaffMatch && !isSuperAdminEmail) {
+          entryToMirrorInRegistry = {
+            ...list[index],
+            businessId: list[index].businessId || activeBusinessId,
+          };
+        }
         return prev;
+      }
+
+      if (regStaffMatch) {
+        const syncedEntry: AppUserAccess = {
+          ...regStaffMatch,
+          uid: currentUser.uid,
+          photoURL: currentUser.photoURL || regStaffMatch.photoURL,
+          businessId: activeBusinessId,
+        };
+        return {
+          ...prev,
+          userAccessList: [syncedEntry, ...list],
+        };
       }
 
       const newUser: AppUserAccess = {
@@ -3269,11 +3356,42 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         approvedAt: autoApprove ? new Date().toISOString() : undefined,
       };
 
+      if (!isSuperAdminEmail) {
+        entryToMirrorInRegistry = newUser;
+      }
+
       return {
         ...prev,
         userAccessList: [newUser, ...list],
       };
     });
+
+    if (entryToMirrorInRegistry) {
+      const reg = saasRegistryRef.current;
+      const mirror = entryToMirrorInRegistry as AppUserAccess;
+      const mirrorEmail = (mirror.email || '').toLowerCase().trim();
+      const existsInReg = (reg.staffAccounts || []).some(
+        (u) =>
+          (u.businessId || DEFAULT_BUSINESS_ID) === activeBusinessId &&
+          (u.uid === mirror.uid || u.email.toLowerCase().trim() === mirrorEmail)
+      );
+      if (!existsInReg) {
+        const nowIso = new Date().toISOString();
+        const nextReg: SaaSRegistryState = {
+          ...reg,
+          staffAccounts: [mirror, ...(reg.staffAccounts || [])],
+          updatedAt: nowIso,
+        };
+        saasRegistryRef.current = nextReg;
+        setSaasRegistry(nextReg);
+        try {
+          localStorage.setItem(SAAS_REGISTRY_CACHE_KEY, JSON.stringify(nextReg));
+        } catch {
+          // ignore
+        }
+        pushSaaSRegistryToCloud(nextReg, true).catch(() => {});
+      }
+    }
   }, [
     currentUser,
     authResolved,
@@ -3284,6 +3402,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     activeBusinessId,
     currentBusiness,
     isPartyPortalUser,
+    saasRegistry.staffAccounts,
   ]);
 
   // ==========================================
@@ -3494,16 +3613,15 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const canAccessModule = useCallback(
     (module: AppPermissionModule): boolean => {
-      const isAdminModule = module === 'userAccess' || module === 'settings';
-      if (isAdminModule) {
-        return isAdminPanelUnlocked;
-      }
-
       if (!currentUser) {
         return false;
       }
       if (isMainAdmin) {
         return true;
+      }
+      const isAdminModule = module === 'userAccess' || module === 'settings';
+      if (isAdminModule) {
+        return isAdminPanelUnlocked;
       }
       if (!currentUserAccess || currentUserAccess.status !== 'approved') {
         return false;
@@ -3547,21 +3665,27 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setActiveBusinessId(businessId);
   }, [activeBusinessId, isMainAdmin, userBusinesses]);
 
-  const persistRegistryUpdate = useCallback(async (nextRegistry: SaaSRegistryState) => {
-    setSaasRegistry(nextRegistry);
-    try {
-      localStorage.setItem(SAAS_REGISTRY_CACHE_KEY, JSON.stringify(nextRegistry));
-    } catch {
-      // ignore
-    }
-    if (currentUser && !isCloudQuotaExhausted()) {
-      const ok = await pushSaaSRegistryToCloud(nextRegistry, false);
-      if (!ok && isCloudQuotaExhausted()) {
-        setCloudSyncStatus('quota_exceeded');
-        setIsQuotaExceeded(true);
+  const persistRegistryUpdate = useCallback(
+    async (nextRegistry: SaaSRegistryState, force: boolean = false): Promise<boolean> => {
+      saasRegistryRef.current = nextRegistry;
+      setSaasRegistry(nextRegistry);
+      try {
+        localStorage.setItem(SAAS_REGISTRY_CACHE_KEY, JSON.stringify(nextRegistry));
+      } catch {
+        // ignore
       }
-    }
-  }, [currentUser]);
+      if (currentUser && (force || !isCloudQuotaExhausted())) {
+        const ok = await pushSaaSRegistryToCloud(nextRegistry, force);
+        if (!ok && isCloudQuotaExhausted()) {
+          setCloudSyncStatus('quota_exceeded');
+          setIsQuotaExceeded(true);
+        }
+        return ok;
+      }
+      return false;
+    },
+    [currentUser]
+  );
 
   const registerNewBusiness = async (data: {
     name: string;
@@ -3877,77 +4001,169 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return true;
   };
 
-  const syncStaffEmailToRegistry = (
-    targetEmail: string,
-    shouldInclude: boolean,
-    targetBusinessId: string = activeBusinessId
-  ) => {
-    const cleanEmail = (targetEmail || '').toLowerCase().trim();
-    if (!cleanEmail) return;
+  const syncStaffEntryToRegistry = async (
+    entry: AppUserAccess,
+    mode: 'upsert' | 'delete',
+    matchUidOrEmail?: string
+  ): Promise<boolean> => {
+    const cleanEmail = (entry.email || '').toLowerCase().trim();
+    const targetBizId = entry.businessId || activeBusinessId || DEFAULT_BUSINESS_ID;
     const reg = saasRegistryRef.current;
-    const targetBiz = reg.businesses.find((b) => b.id === targetBusinessId);
-    if (!targetBiz) return;
-    const ownerEmail = (targetBiz.ownerEmail || '').toLowerCase().trim();
-    if (!shouldInclude && cleanEmail === ownerEmail) return;
+    const currentStaff = reg.staffAccounts || [];
 
-    const currentMembers = targetBiz.memberEmails || [];
-    const exists = currentMembers.some((m) => m.toLowerCase().trim() === cleanEmail);
-    if (shouldInclude && exists) return;
-    if (!shouldInclude && !exists) return;
+    const isSameStaff = (s: AppUserAccess) => {
+      const sBiz = s.businessId || DEFAULT_BUSINESS_ID;
+      if (sBiz !== targetBizId) return false;
+      if (s.uid && (s.uid === entry.uid || (matchUidOrEmail && s.uid === matchUidOrEmail))) {
+        return true;
+      }
+      if (cleanEmail && s.email.toLowerCase().trim() === cleanEmail) return true;
+      if (matchUidOrEmail && s.email.toLowerCase().trim() === matchUidOrEmail.toLowerCase().trim()) {
+        return true;
+      }
+      return false;
+    };
 
-    const nextMembers = shouldInclude
-      ? [...currentMembers, cleanEmail]
-      : currentMembers.filter((m) => m.toLowerCase().trim() !== cleanEmail);
+    let nextStaffAccounts: AppUserAccess[];
+    if (mode === 'delete') {
+      nextStaffAccounts = currentStaff.filter((s) => !isSameStaff(s));
+    } else {
+      const existingIdx = currentStaff.findIndex(isSameStaff);
+      const normalizedEntry: AppUserAccess = {
+        ...entry,
+        businessId: targetBizId,
+      };
+      if (existingIdx >= 0) {
+        const prevItem = currentStaff[existingIdx];
+        nextStaffAccounts = [...currentStaff];
+        nextStaffAccounts[existingIdx] = {
+          ...prevItem,
+          ...normalizedEntry,
+          requestedAt: prevItem.requestedAt || normalizedEntry.requestedAt,
+          loginUsername: normalizedEntry.loginUsername ?? prevItem.loginUsername,
+          assignedPassword: normalizedEntry.assignedPassword ?? prevItem.assignedPassword,
+        };
+      } else {
+        nextStaffAccounts = [normalizedEntry, ...currentStaff];
+      }
+    }
+
+    const shouldIncludeMember = mode === 'upsert' && entry.status === 'approved';
+    const nextBusinesses = reg.businesses.map((b) => {
+      if (b.id !== targetBizId || !cleanEmail) return b;
+      const ownerEmail = (b.ownerEmail || '').toLowerCase().trim();
+      const currentMembers = b.memberEmails || [];
+      const exists = currentMembers.some((m) => m.toLowerCase().trim() === cleanEmail);
+      if (!shouldIncludeMember && cleanEmail === ownerEmail) return b;
+      if (shouldIncludeMember && exists) return b;
+      if (!shouldIncludeMember && !exists) return b;
+      const nextMembers = shouldIncludeMember
+        ? [...currentMembers, cleanEmail]
+        : currentMembers.filter((m) => m.toLowerCase().trim() !== cleanEmail);
+      return {
+        ...b,
+        memberEmails: nextMembers,
+        updatedAt: new Date().toISOString(),
+      };
+    });
 
     const nowIso = new Date().toISOString();
-    persistRegistryUpdate({
-      ...reg,
-      businesses: reg.businesses.map((b) =>
-        b.id === targetBusinessId ? { ...b, memberEmails: nextMembers, updatedAt: nowIso } : b
-      ),
-      updatedAt: nowIso,
-    });
+    return persistRegistryUpdate(
+      {
+        ...reg,
+        businesses: nextBusinesses,
+        staffAccounts: nextStaffAccounts,
+        updatedAt: nowIso,
+      },
+      true
+    );
   };
 
-  const updateUserAccess = (uid: string, updates: Partial<AppUserAccess>) => {
+  const updateUserAccess = (
+    uid: string,
+    updates: Partial<AppUserAccess>,
+    targetBusinessId?: string
+  ) => {
     if (guardReadOnly()) return;
+    const bizId = targetBusinessId || activeBusinessId;
     const now = new Date().toISOString();
-    const existing = (dbRef.current.userAccessList || []).find(
-      (u) => u.uid === uid || u.email === uid
+
+    const localExisting =
+      bizId === activeBusinessId
+        ? (dbRef.current.userAccessList || []).find((u) => u.uid === uid || u.email === uid)
+        : undefined;
+    const regExisting = (saasRegistryRef.current.staffAccounts || []).find(
+      (u) =>
+        (u.businessId || DEFAULT_BUSINESS_ID) === bizId &&
+        (u.uid === uid || u.email.toLowerCase().trim() === uid.toLowerCase().trim())
     );
-    setDb((prev) => ({
-      ...prev,
-      userAccessList: (prev.userAccessList || []).map((u) => {
-        if (u.uid === uid || u.email === uid) {
-          const merged = { ...u, ...updates };
-          if (updates.status === 'approved' && !u.approvedAt) {
-            merged.approvedAt = now;
-            merged.approvedBy = currentUser?.email || MAIN_SUPER_ADMIN_EMAIL;
-          }
-          return merged;
-        }
-        return u;
-      }),
-    }));
-    if (existing?.email && updates.status !== undefined) {
-      syncStaffEmailToRegistry(existing.email, updates.status === 'approved', activeBusinessId);
+    const baseExisting = localExisting || regExisting;
+    if (!baseExisting) return;
+
+    const mergedEntry: AppUserAccess = {
+      ...baseExisting,
+      ...updates,
+      businessId: baseExisting.businessId || bizId,
+    };
+    if (updates.status === 'approved' && !mergedEntry.approvedAt) {
+      mergedEntry.approvedAt = now;
+      mergedEntry.approvedBy = currentUser?.email || MAIN_SUPER_ADMIN_EMAIL;
     }
+
+    if (bizId === activeBusinessId) {
+      setDb((prev) => {
+        const list = prev.userAccessList || [];
+        const idx = list.findIndex(
+          (u) => u.uid === uid || u.email.toLowerCase().trim() === mergedEntry.email.toLowerCase().trim()
+        );
+        if (idx >= 0) {
+          const updated = [...list];
+          updated[idx] = mergedEntry;
+          return { ...prev, userAccessList: updated };
+        }
+        return { ...prev, userAccessList: [mergedEntry, ...list] };
+      });
+    }
+
+    syncStaffEntryToRegistry(mergedEntry, 'upsert', uid).catch(() => {});
   };
 
-  const deleteUserAccess = (uid: string): boolean => {
+  const deleteUserAccess = (uid: string, targetBusinessId?: string): boolean => {
     if (guardReadOnly()) return false;
-    const existing = (dbRef.current.userAccessList || []).find(
-      (u) => u.uid === uid || u.email === uid
+    const bizId = targetBusinessId || activeBusinessId;
+    const localExisting =
+      bizId === activeBusinessId
+        ? (dbRef.current.userAccessList || []).find((u) => u.uid === uid || u.email === uid)
+        : undefined;
+    const regExisting = (saasRegistryRef.current.staffAccounts || []).find(
+      (u) =>
+        (u.businessId || DEFAULT_BUSINESS_ID) === bizId &&
+        (u.uid === uid || u.email.toLowerCase().trim() === uid.toLowerCase().trim())
     );
-    setDb((prev) => ({
-      ...prev,
-      userAccessList: (prev.userAccessList || []).filter(
-        (u) => u.uid !== uid && u.email !== uid
-      ),
-    }));
-    if (existing?.email) {
-      syncStaffEmailToRegistry(existing.email, false, activeBusinessId);
+    const targetEntry =
+      localExisting ||
+      regExisting ||
+      ({
+        uid,
+        email: uid.includes('@') ? uid : '',
+        displayName: '',
+        status: 'rejected',
+        role: 'custom',
+        businessId: bizId,
+        permissions: {} as Record<AppPermissionModule, boolean>,
+        requestedAt: new Date().toISOString(),
+      } as AppUserAccess);
+
+    if (bizId === activeBusinessId) {
+      setDb((prev) => ({
+        ...prev,
+        userAccessList: (prev.userAccessList || []).filter(
+          (u) => u.uid !== uid && u.email !== uid && u.email !== targetEntry.email
+        ),
+      }));
     }
+
+    syncStaffEntryToRegistry(targetEntry, 'delete', uid).catch(() => {});
     return true;
   };
 
@@ -4109,6 +4325,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return [nextEntry, ...list];
     };
 
+    let remotePushOk = false;
     if (targetBizId === activeBusinessId) {
       const nextState: DatabaseState = {
         ...dbRef.current,
@@ -4116,7 +4333,10 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       };
       setDb(nextState);
       if (currentUser) {
-        await pushDatabaseToCloud(nextState, currentUser, true, targetBizId).catch(() => {});
+        const resPush = await pushDatabaseToCloud(nextState, currentUser, true, targetBizId).catch(
+          () => ({ success: false })
+        );
+        remotePushOk = Boolean(resPush?.success);
       }
     } else if (isMainAdmin && currentUser) {
       try {
@@ -4143,17 +4363,32 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           ...baseDb,
           userAccessList: mergeIntoList(baseDb.userAccessList || []),
         };
-        await pushDatabaseToCloud(updatedRemoteDb, currentUser, true, targetBizId);
+        const resPush = await pushDatabaseToCloud(
+          updatedRemoteDb,
+          currentUser,
+          true,
+          targetBizId
+        ).catch(() => ({ success: false }));
+        remotePushOk = Boolean(resPush?.success);
       } catch (err: any) {
-        console.warn('Cross-business staff provisioning warning:', err);
-        return {
-          success: false,
-          error: 'নির্বাচিত প্রেসের ডাটাবেজে ইউজার সংরক্ষণ করতে সমস্যা হয়েছে।',
-        };
+        console.warn('Cross-business staff provisioning chunk sync note:', err);
       }
     }
 
-    syncStaffEmailToRegistry(email, finalStatus === 'approved', targetBizId);
+    const regSyncOk = await syncStaffEntryToRegistry(
+      nextEntry,
+      'upsert',
+      input.existingUid || email
+    );
+
+    if (!regSyncOk && !remotePushOk) {
+      return {
+        success: false,
+        error:
+          'ফায়ারবেস ক্লাউডে ইউজার তথ্য সংরক্ষণ করা যায়নি। ইন্টারনেট সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।',
+      };
+    }
+
     return { success: true, userAccess: nextEntry };
   };
 
@@ -4586,11 +4821,17 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return;
       }
 
+      const staffList = Array.isArray(baseReg.staffAccounts) ? baseReg.staffAccounts : [];
       const matching = existingBusinesses.filter(
         (b) =>
           b.ownerEmail?.toLowerCase().trim() === email ||
           b.ownerUid === user.uid ||
-          (b.memberEmails || []).some((m) => m.toLowerCase().trim() === email)
+          (b.memberEmails || []).some((m) => m.toLowerCase().trim() === email) ||
+          staffList.some(
+            (s) =>
+              (s.businessId || DEFAULT_BUSINESS_ID) === b.id &&
+              (s.uid === user.uid || s.email.toLowerCase().trim() === email)
+          )
       );
       const existingTarget =
         matching.find((b) => b.id !== DEFAULT_BUSINESS_ID && b.status === 'approved') ||
