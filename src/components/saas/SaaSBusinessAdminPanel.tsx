@@ -35,6 +35,7 @@ import {
   XCircle,
   Save,
   Wrench,
+  UserPlus,
 } from 'lucide-react';
 
 interface SaaSBusinessAdminPanelProps {
@@ -74,6 +75,7 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
     reviewSubscriptionPaymentRequest,
     adminUpdatePartyAccount,
     deletePartyAccount,
+    provisionStaffUser,
   } = useDatabase();
 
   const [subTab, setSubTab] = useState<'businesses' | 'packages' | 'party-accounts'>('businesses');
@@ -125,6 +127,191 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
   const [platformForm, setPlatformForm] = useState<SaaSPlatformSettings>(saasRegistry.platformSettings);
   const [savedNotice, setSavedNotice] = useState('');
   const [reviewingReqId, setReviewingReqId] = useState<string | null>(null);
+
+  // Super Admin Staff User Provisioning Modal State
+  const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
+  const [staffBizId, setStaffBizId] = useState(activeBusinessId);
+  const [staffName, setStaffName] = useState('');
+  const [staffIdentifier, setStaffIdentifier] = useState('');
+  const [staffPassword, setStaffPassword] = useState('');
+  const [showStaffPwd, setShowStaffPwd] = useState(false);
+  const [staffRole, setStaffRole] = useState<
+    'super_admin' | 'admin' | 'manager' | 'accountant' | 'operator' | 'viewer' | 'custom'
+  >('manager');
+  const [staffReadOnly, setStaffReadOnly] = useState(false);
+  const [staffPerms, setStaffPerms] = useState<Record<AppPermissionModule, boolean>>({
+    dashboard: true,
+    parties: true,
+    books: true,
+    production: true,
+    plates: true,
+    paperStock: true,
+    billing: true,
+    collections: true,
+    incomeExpense: false,
+    inkSuppliers: true,
+    employees: true,
+    attendance: true,
+    combinedAttendance: true,
+    payroll: false,
+    cutting: true,
+    putti: true,
+    reports: true,
+    dataMgmt: false,
+    settings: false,
+    userAccess: false,
+  });
+  const [staffError, setStaffError] = useState('');
+  const [savingStaff, setSavingStaff] = useState(false);
+
+  const applyStaffRolePreset = (
+    role: 'super_admin' | 'admin' | 'manager' | 'accountant' | 'operator' | 'viewer' | 'custom'
+  ) => {
+    setStaffRole(role);
+    if (role === 'viewer') {
+      setStaffReadOnly(true);
+      setStaffPerms({
+        dashboard: true,
+        parties: true,
+        books: true,
+        production: true,
+        plates: true,
+        paperStock: true,
+        billing: true,
+        collections: true,
+        incomeExpense: true,
+        inkSuppliers: true,
+        employees: true,
+        attendance: true,
+        combinedAttendance: true,
+        payroll: true,
+        cutting: true,
+        putti: true,
+        reports: true,
+        dataMgmt: false,
+        settings: false,
+        userAccess: false,
+      });
+    } else if (role === 'super_admin' || role === 'admin') {
+      setStaffReadOnly(false);
+      const allTrue: any = { settings: true, userAccess: role === 'super_admin' };
+      ALL_CONFIGURABLE_MODULES.forEach((m) => (allTrue[m.key] = true));
+      setStaffPerms(allTrue);
+    } else if (role === 'manager') {
+      setStaffReadOnly(false);
+      setStaffPerms({
+        dashboard: true,
+        parties: true,
+        books: true,
+        production: true,
+        plates: true,
+        paperStock: true,
+        billing: true,
+        collections: true,
+        incomeExpense: false,
+        inkSuppliers: true,
+        employees: true,
+        attendance: true,
+        combinedAttendance: true,
+        payroll: false,
+        cutting: true,
+        putti: true,
+        reports: true,
+        dataMgmt: false,
+        settings: false,
+        userAccess: false,
+      });
+    } else if (role === 'accountant') {
+      setStaffReadOnly(false);
+      setStaffPerms({
+        dashboard: true,
+        parties: true,
+        books: false,
+        production: false,
+        plates: false,
+        paperStock: false,
+        billing: true,
+        collections: true,
+        incomeExpense: true,
+        inkSuppliers: true,
+        employees: false,
+        attendance: false,
+        combinedAttendance: false,
+        payroll: true,
+        cutting: false,
+        putti: true,
+        reports: true,
+        dataMgmt: false,
+        settings: false,
+        userAccess: false,
+      });
+    } else if (role === 'operator') {
+      setStaffReadOnly(false);
+      setStaffPerms({
+        dashboard: true,
+        parties: false,
+        books: true,
+        production: true,
+        plates: true,
+        paperStock: true,
+        billing: false,
+        collections: false,
+        incomeExpense: false,
+        inkSuppliers: false,
+        employees: false,
+        attendance: false,
+        combinedAttendance: false,
+        payroll: false,
+        cutting: true,
+        putti: false,
+        reports: false,
+        dataMgmt: false,
+        settings: false,
+        userAccess: false,
+      });
+    }
+  };
+
+  const openStaffProvisionModal = (bizId?: string) => {
+    setStaffBizId(bizId || activeBusinessId || (saasRegistry.businesses[0]?.id ?? DEFAULT_BUSINESS_ID));
+    setStaffName('');
+    setStaffIdentifier('');
+    setStaffPassword('');
+    setShowStaffPwd(false);
+    setStaffError('');
+    applyStaffRolePreset('manager');
+    setIsStaffModalOpen(true);
+  };
+
+  const handleSaveStaffUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStaffError('');
+    setSavingStaff(true);
+    try {
+      const res = await provisionStaffUser({
+        businessId: staffBizId,
+        displayName: staffName,
+        identifier: staffIdentifier,
+        password: staffPassword,
+        role: staffRole,
+        isReadOnly: staffReadOnly,
+        permissions: staffPerms,
+        status: 'approved',
+      });
+      if (!res.success) {
+        setStaffError(res.error || 'ইউজার তৈরি করা যায়নি।');
+        return;
+      }
+      const chosenBiz = (saasRegistry.businesses || []).find((b) => b.id === staffBizId);
+      setIsStaffModalOpen(false);
+      setSavedNotice(
+        `"${chosenBiz?.name || 'নির্বাচিত প্রেস'}"-এর জন্য নতুন ইউজার "${staffName.trim()}" (${staffIdentifier.trim()}) সফলভাবে সেট করা হয়েছে!`
+      );
+      setTimeout(() => setSavedNotice(''), 6000);
+    } finally {
+      setSavingStaff(false);
+    }
+  };
 
   React.useEffect(() => {
     setPlatformForm(saasRegistry.platformSettings);
@@ -397,6 +584,14 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
 
           <div className="flex flex-wrap items-center gap-2">
             <button
+              type="button"
+              onClick={() => openStaffProvisionModal()}
+              className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-xs rounded-xl flex items-center space-x-1.5 shadow-md transition"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>ইউজার ও পাসওয়ার্ড সেট</span>
+            </button>
+            <button
               onClick={() => setIsAddModalOpen(true)}
               className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-xl flex items-center space-x-1.5 shadow-md transition"
             >
@@ -405,6 +600,19 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
             </button>
           </div>
         </div>
+
+        {savedNotice && (
+          <div className="mt-4 bg-emerald-500/20 border border-emerald-400/40 text-emerald-100 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between gap-2">
+            <span>✓ {savedNotice}</span>
+            <button
+              type="button"
+              onClick={() => setSavedNotice('')}
+              className="text-emerald-200 hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {/* Summary KPI Strip */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-5 text-xs">
@@ -776,6 +984,16 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
                           >
                             <Wrench className="w-3.5 h-3.5" />
                             <span>{isActiveShop ? 'চলমান দোকান' : 'দোকানে প্রবেশ'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => openStaffProvisionModal(biz.id)}
+                            className="px-2 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold rounded-lg text-[11px] flex items-center space-x-1 transition"
+                            title="এই দোকানের জন্য ইউজারনেম, পাসওয়ার্ড ও দায়িত্ব সেট করুন"
+                          >
+                            <UserPlus className="w-3.5 h-3.5" />
+                            <span>ইউজার</span>
                           </button>
 
                           <button
@@ -1770,6 +1988,226 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
                   className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold"
                 >
                   {savingPartyAcc ? 'সংরক্ষণ হচ্ছে...' : 'সংরক্ষণ করুন'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Super Admin Staff Credential Provisioning */}
+      {isStaffModalOpen && (
+        <div className="no-print fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4 my-auto max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-2">
+                <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    সুপার এডমিন: ইউজারনেম, পাসওয়ার্ড ও দায়িত্ব সেট করুন
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    যেকোনো প্রেসের জন্য ইউজার আইডি/ইমেইল ও পাসওয়ার্ড তৈরি করুন — কর্মচারী সরাসরি লগইন করে নির্ধারিত দায়িত্ব পালন করবেন
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsStaffModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {staffError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
+                {staffError}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveStaffUser} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">প্রেস / দোকান নির্বাচন করুন *</label>
+                  <select
+                    value={staffBizId}
+                    onChange={(e) => setStaffBizId(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white font-bold focus:outline-indigo-500"
+                  >
+                    {businesses.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">রোল / পদবি *</label>
+                  <select
+                    value={staffRole}
+                    onChange={(e) => applyStaffRolePreset(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white font-bold focus:outline-indigo-500"
+                  >
+                    <option value="manager">ম্যানেজার</option>
+                    <option value="operator">মেশিন অপারেটর</option>
+                    <option value="accountant">হিসাবরক্ষক</option>
+                    <option value="viewer">দর্শক (Read-Only)</option>
+                    <option value="admin">প্রেস অ্যাডমিন (সব মডিউল)</option>
+                    <option value="super_admin">সুপার অ্যাডমিন</option>
+                    <option value="custom">কাস্টম (নিজে নির্বাচন করুন)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-indigo-50/50 p-3.5 rounded-xl border border-indigo-200/80">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">ব্যবহারকারীর নাম *</label>
+                  <input
+                    type="text"
+                    required
+                    value={staffName}
+                    onChange={(e) => setStaffName(e.target.value)}
+                    placeholder="যেমন: মো. করিম"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white font-bold focus:outline-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">ইউজারনেম বা ইমেইল *</label>
+                  <input
+                    type="text"
+                    required
+                    value={staffIdentifier}
+                    onChange={(e) => setStaffIdentifier(e.target.value)}
+                    placeholder="karim1 বা mail@gmail.com"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white font-mono font-bold focus:outline-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">পাসওয়ার্ড * (কমপক্ষে ৬ অক্ষর)</label>
+                  <div className="relative">
+                    <input
+                      type={showStaffPwd ? 'text' : 'password'}
+                      required
+                      minLength={6}
+                      value={staffPassword}
+                      onChange={(e) => setStaffPassword(e.target.value)}
+                      placeholder="কমপক্ষে ৬ অক্ষর"
+                      className="w-full pl-3 pr-9 py-2 border border-slate-300 rounded-xl bg-white font-bold focus:outline-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowStaffPwd(!showStaffPwd)}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                    >
+                      {showStaffPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start space-x-3">
+                <input
+                  type="checkbox"
+                  id="superAdminStaffReadOnly"
+                  checked={staffReadOnly}
+                  onChange={(e) => setStaffReadOnly(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded text-amber-600 cursor-pointer"
+                />
+                <label htmlFor="superAdminStaffReadOnly" className="cursor-pointer select-none">
+                  <span className="font-bold text-amber-900 block">
+                    শুধুমাত্র প্রদর্শন মোড (Read-Only):
+                  </span>
+                  <span className="text-amber-800 text-[11px] block">
+                    নতুন ডাটা যোগ বা পরিবর্তন করতে পারবে না, কেবল অনুমোদিত মডিউল দেখতে পারবে।
+                  </span>
+                </label>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-slate-800 text-sm">
+                    দায়িত্ব ও মডিউল অনুমতি ({Object.values(staffPerms).filter(Boolean).length} টি নির্বাচিত)
+                  </span>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const all: any = { settings: true, userAccess: false };
+                        ALL_CONFIGURABLE_MODULES.forEach((m) => (all[m.key] = true));
+                        setStaffPerms(all);
+                      }}
+                      className="text-xs text-indigo-600 hover:underline font-bold"
+                    >
+                      সব সিলেক্ট
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const none: any = { settings: false, userAccess: false };
+                        ALL_CONFIGURABLE_MODULES.forEach((m) => (none[m.key] = false));
+                        setStaffPerms(none);
+                      }}
+                      className="text-xs text-rose-600 hover:underline font-bold"
+                    >
+                      সব বাতিল
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto p-2 border border-slate-200 rounded-xl bg-slate-50/50">
+                  {ALL_CONFIGURABLE_MODULES.map((mod) => {
+                    const checked = !!staffPerms[mod.key];
+                    return (
+                      <label
+                        key={mod.key}
+                        className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition ${
+                          checked
+                            ? 'bg-indigo-50/70 border-indigo-200 text-indigo-950'
+                            : 'bg-white border-slate-200 text-slate-600'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              setStaffPerms((prev) => ({ ...prev, [mod.key]: !prev[mod.key] }))
+                            }
+                            className="rounded text-indigo-600"
+                          />
+                          <span className="font-bold">{mod.label}</span>
+                        </div>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                          {mod.category}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsStaffModalOpen(false)}
+                  className="px-4 py-2 border border-slate-300 rounded-xl font-bold text-slate-700"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingStaff}
+                  className="inline-flex items-center space-x-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl font-bold shadow-md"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{savingStaff ? 'তৈরি হচ্ছে...' : 'ইউজার ও পাসওয়ার্ড সেট করুন'}</span>
                 </button>
               </div>
             </form>

@@ -431,8 +431,13 @@ const AppContent: React.FC = () => {
     return <SetupWizard />;
   }
 
-  // Pending / Unapproved Business Gate (for new customer press businesses)
-  if (!isMainAdmin && currentBusiness && currentBusiness.status === 'pending') {
+  // Pending / Unapproved Business Gate (for non-trial pending businesses only)
+  if (
+    !isMainAdmin &&
+    currentBusiness &&
+    currentBusiness.status === 'pending' &&
+    currentBusiness.planType !== 'trial'
+  ) {
     return (
       <div className="min-h-screen bg-slate-100">
         <Navbar

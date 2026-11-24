@@ -564,6 +564,8 @@ export type UserApprovalStatus = 'pending' | 'approved' | 'rejected';
 export interface AppUserAccess {
   uid: string;
   email: string;
+  loginUsername?: string; // অ্যাডমিন কর্তৃক সেট করা ইউজারনেম (ঐচ্ছিক)
+  assignedPassword?: string; // অ্যাডমিন কর্তৃক সেট করা পাসওয়ার্ড রেফারেন্স
   displayName: string;
   photoURL?: string;
   status: UserApprovalStatus; // 'pending' | 'approved' | 'rejected'

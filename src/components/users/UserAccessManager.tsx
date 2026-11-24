@@ -23,6 +23,9 @@ import {
   Save,
   Mail,
   User,
+  UserPlus,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 interface ModuleConfig {
@@ -55,16 +58,28 @@ const MODULES_CONFIG: ModuleConfig[] = [
 ];
 
 export const UserAccessManager: React.FC = () => {
-  const { db, currentUser, isMainAdmin, updateUserAccess, deleteUserAccess } = useDatabase();
+  const { db, currentUser, isMainAdmin, updateUserAccess, deleteUserAccess, provisionStaffUser } =
+    useDatabase();
 
   const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<AppUserAccess | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isCreateMode, setIsCreateMode] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{
     isOpen: boolean;
     uid: string;
     email: string;
   }>({ isOpen: false, uid: '', email: '' });
+  const [visiblePwdMap, setVisiblePwdMap] = useState<Record<string, boolean>>({});
+
+  // Create/Edit user form state
+  const [formDisplayName, setFormDisplayName] = useState('');
+  const [formIdentifier, setFormIdentifier] = useState('');
+  const [formPassword, setFormPassword] = useState('');
+  const [showFormPwd, setShowFormPwd] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [savingForm, setSavingForm] = useState(false);
+  const [actionSuccessMsg, setActionSuccessMsg] = useState('');
 
   // Permissions form in modal
   const [editRole, setEditRole] = useState<AppUserAccess['role']>('operator');
@@ -98,11 +113,31 @@ export const UserAccessManager: React.FC = () => {
   const filteredUsers = usersList.filter(
     (u) =>
       u.email.toLowerCase().includes(search.toLowerCase()) ||
+      (u.loginUsername || '').toLowerCase().includes(search.toLowerCase()) ||
       u.displayName.toLowerCase().includes(search.toLowerCase())
   );
 
+  const openCreateModal = () => {
+    setIsCreateMode(true);
+    setSelectedUser(null);
+    setFormDisplayName('');
+    setFormIdentifier('');
+    setFormPassword('');
+    setShowFormPwd(false);
+    setFormError('');
+    setEditStatus('approved');
+    handleRolePreset('operator');
+    setIsEditModalOpen(true);
+  };
+
   const openEditModal = (user: AppUserAccess) => {
+    setIsCreateMode(false);
     setSelectedUser(user);
+    setFormDisplayName(user.displayName || '');
+    setFormIdentifier(user.loginUsername || user.email || '');
+    setFormPassword('');
+    setShowFormPwd(false);
+    setFormError('');
     setEditRole(user.role);
     setEditStatus(user.status);
     setEditIsReadOnly(user.role === 'viewer' || !!user.isReadOnly);
@@ -284,11 +319,69 @@ export const UserAccessManager: React.FC = () => {
     }));
   };
 
-  const handleSaveAccess = (e: React.FormEvent) => {
+  const handleSaveAccess = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
+
+    if (isCreateMode) {
+      setSavingForm(true);
+      try {
+        const res = await provisionStaffUser({
+          displayName: formDisplayName,
+          identifier: formIdentifier,
+          password: formPassword,
+          role: editRole,
+          isReadOnly: editIsReadOnly,
+          permissions: editPermissions,
+          status: editStatus,
+        });
+        if (!res.success) {
+          setFormError(res.error || 'ইউজার তৈরি করা যায়নি।');
+          return;
+        }
+        setIsEditModalOpen(false);
+        setActionSuccessMsg(
+          `নতুন ইউজার "${formDisplayName.trim()}" (${formIdentifier.trim()}) সফলভাবে তৈরি ও সক্রিয় করা হয়েছে!`
+        );
+        setTimeout(() => setActionSuccessMsg(''), 5000);
+      } finally {
+        setSavingForm(false);
+      }
+      return;
+    }
+
     if (!selectedUser) return;
 
+    const cleanNewPwd = formPassword.trim();
+    if (cleanNewPwd) {
+      setSavingForm(true);
+      try {
+        const res = await provisionStaffUser({
+          displayName: formDisplayName.trim() || selectedUser.displayName,
+          identifier: selectedUser.loginUsername || selectedUser.email,
+          password: cleanNewPwd,
+          role: editRole,
+          isReadOnly: editIsReadOnly,
+          permissions: editPermissions,
+          status: editStatus,
+          existingUid: selectedUser.uid,
+          oldAssignedPassword: selectedUser.assignedPassword,
+        });
+        if (!res.success) {
+          setFormError(res.error || 'তথ্য ও পাসওয়ার্ড আপডেট করা যায়নি।');
+          return;
+        }
+        setIsEditModalOpen(false);
+        setActionSuccessMsg(`"${selectedUser.displayName}" এর পাসওয়ার্ড ও এক্সেস আপডেট হয়েছে।`);
+        setTimeout(() => setActionSuccessMsg(''), 4000);
+      } finally {
+        setSavingForm(false);
+      }
+      return;
+    }
+
     updateUserAccess(selectedUser.uid, {
+      displayName: formDisplayName.trim() || selectedUser.displayName,
       role: editRole,
       status: editStatus,
       isReadOnly: editIsReadOnly,
@@ -356,11 +449,33 @@ export const UserAccessManager: React.FC = () => {
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-                একাউন্ট অনুমোদন করুন এবং কোন কর্মচারী কোন কোন মডিউল দেখতে ও কাজ করতে পারবে তা নির্দিষ্ট করুন
+                কর্মচারীর ইউজারনেম/ইমেইল ও পাসওয়ার্ড সেট করুন অথবা অনুমোদন করে মডিউলভিত্তিক দায়িত্ব ভাগ করে দিন
               </p>
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 shadow-md shadow-indigo-600/20 transition shrink-0"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>+ নতুন ইউজার ও পাসওয়ার্ড তৈরি</span>
+          </button>
         </div>
+
+        {actionSuccessMsg && (
+          <div className="mt-4 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between gap-2">
+            <span>✓ {actionSuccessMsg}</span>
+            <button
+              type="button"
+              onClick={() => setActionSuccessMsg('')}
+              className="text-emerald-600 hover:text-emerald-900"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {/* Super Admin Notice Card */}
         <div className="mt-6 bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-2xl p-4 sm:p-5 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -423,7 +538,7 @@ export const UserAccessManager: React.FC = () => {
               <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
                 <tr>
                   <th className="py-3 px-3">ব্যবহারকারী</th>
-                  <th className="py-3 px-3">ইমেইল</th>
+                  <th className="py-3 px-3">লগইন ইউজারনেম / ইমেইল ও পাসওয়ার্ড</th>
                   <th className="py-3 px-3 text-center">অবস্থা (Status)</th>
                   <th className="py-3 px-3 text-center">রোল / পদবি</th>
                   <th className="py-3 px-3 text-center">অনুমোদিত মডিউল</th>
@@ -437,6 +552,7 @@ export const UserAccessManager: React.FC = () => {
                   const activeModulesCount = user.permissions
                     ? Object.values(user.permissions).filter(Boolean).length
                     : 0;
+                  const showPwd = !!visiblePwdMap[user.uid];
 
                   return (
                     <tr key={user.uid} className="hover:bg-slate-50 transition">
@@ -464,7 +580,33 @@ export const UserAccessManager: React.FC = () => {
                         </div>
                       </td>
 
-                      <td className="py-3 px-3 text-slate-600 font-mono">{user.email}</td>
+                      <td className="py-3 px-3 text-slate-600">
+                        {user.loginUsername && (
+                          <div className="inline-flex items-center gap-1 px-2 py-0.5 mb-0.5 rounded bg-indigo-50 text-indigo-800 font-mono font-bold text-[11px]">
+                            <User className="w-3 h-3" />
+                            <span>{user.loginUsername}</span>
+                          </div>
+                        )}
+                        <div className="font-mono text-[11px] text-slate-600">{user.email}</div>
+                        {user.assignedPassword && (
+                          <div className="mt-0.5 flex items-center gap-1.5 text-[11px]">
+                            <span className="text-slate-400">পাস:</span>
+                            <span className="font-mono font-bold text-slate-800">
+                              {showPwd ? user.assignedPassword : '••••••'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setVisiblePwdMap((prev) => ({ ...prev, [user.uid]: !prev[user.uid] }))
+                              }
+                              className="text-slate-400 hover:text-indigo-600"
+                              title={showPwd ? 'পাসওয়ার্ড লুকান' : 'পাসওয়ার্ড দেখুন'}
+                            >
+                              {showPwd ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        )}
+                      </td>
 
                       <td className="py-3 px-3 text-center whitespace-nowrap">
                         {user.status === 'approved' ? (
@@ -583,25 +725,32 @@ export const UserAccessManager: React.FC = () => {
       </div>
 
       {/* ==================================================== */}
-      {/* MODAL: EDIT USER ROLE & GRANULAR PERMISSIONS        */}
+      {/* MODAL: CREATE OR EDIT USER CREDENTIALS & PERMISSIONS */}
       {/* ==================================================== */}
-      {isEditModalOpen && selectedUser && (
+      {isEditModalOpen && (isCreateMode || selectedUser) && (
         <div className="no-print fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4 my-auto max-h-[92vh] overflow-y-auto">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center space-x-2">
                 <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
-                  <Key className="w-5 h-5" />
+                  {isCreateMode ? <UserPlus className="w-5 h-5" /> : <Key className="w-5 h-5" />}
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-800">
-                    এক্সেস পারমিশন পরিবর্তন: {selectedUser.displayName}
+                    {isCreateMode
+                      ? 'নতুন ইউজার, পাসওয়ার্ড ও দায়িত্ব সেট করুন'
+                      : `এক্সেস পারমিশন পরিবর্তন: ${selectedUser?.displayName}`}
                   </h3>
-                  <p className="text-xs text-slate-500 font-mono">{selectedUser.email}</p>
+                  <p className="text-xs text-slate-500 font-mono">
+                    {isCreateMode
+                      ? 'এই ইউজারনেম/ইমেইল ও পাসওয়ার্ড দিয়ে কর্মচারী সরাসরি লগইন করতে পারবেন'
+                      : selectedUser?.email}
+                  </p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsEditModalOpen(false)}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
               >
@@ -609,7 +758,69 @@ export const UserAccessManager: React.FC = () => {
               </button>
             </div>
 
+            {formError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
+                {formError}
+              </div>
+            )}
+
             <form onSubmit={handleSaveAccess} className="space-y-4 text-xs">
+              {/* Credentials Section */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-indigo-50/50 p-3.5 rounded-xl border border-indigo-200/80">
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">কর্মচারীর নাম *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formDisplayName}
+                    onChange={(e) => setFormDisplayName(e.target.value)}
+                    placeholder="যেমন: মো. করিম"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white font-bold focus:outline-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">
+                    ইউজারনেম বা ইমেইল *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    disabled={!isCreateMode}
+                    value={formIdentifier}
+                    onChange={(e) => setFormIdentifier(e.target.value)}
+                    placeholder="karim1 বা mail@gmail.com"
+                    className={`w-full px-3 py-2 border border-slate-300 rounded-xl font-mono font-bold focus:outline-indigo-500 ${
+                      !isCreateMode ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">
+                    {isCreateMode ? 'পাসওয়ার্ড * (কমপক্ষে ৬ অক্ষর)' : 'নতুন পাসওয়ার্ড (ঐচ্ছিক)'}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showFormPwd ? 'text' : 'password'}
+                      required={isCreateMode}
+                      minLength={isCreateMode ? 6 : undefined}
+                      value={formPassword}
+                      onChange={(e) => setFormPassword(e.target.value)}
+                      placeholder={isCreateMode ? 'কমপক্ষে ৬ অক্ষর' : 'পরিবর্তন করতে লিখুন...'}
+                      className="w-full pl-3 pr-9 py-2 border border-slate-300 rounded-xl bg-white font-bold focus:outline-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowFormPwd(!showFormPwd)}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                    >
+                      {showFormPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* Row 1: Approval Status & Role */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                 <div>
@@ -754,10 +965,17 @@ export const UserAccessManager: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="inline-flex items-center space-x-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md shadow-indigo-600/20"
+                  disabled={savingForm}
+                  className="inline-flex items-center space-x-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl font-bold shadow-md shadow-indigo-600/20"
                 >
                   <Save className="w-4 h-4" />
-                  <span>পারমিশন সংরক্ষণ করুন</span>
+                  <span>
+                    {savingForm
+                      ? 'সংরক্ষণ হচ্ছে...'
+                      : isCreateMode
+                      ? 'ইউজার তৈরি ও সক্রিয় করুন'
+                      : 'পারমিশন সংরক্ষণ করুন'}
+                  </span>
                 </button>
               </div>
             </form>

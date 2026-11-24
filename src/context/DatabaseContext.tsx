@@ -15,7 +15,7 @@ import {
   onAuthStateChanged,
   User,
 } from '../firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import {
   handleFirestoreError,
   OperationType,
@@ -330,6 +330,18 @@ interface DatabaseContextType {
   canAccessModule: (module: AppPermissionModule) => boolean;
   updateUserAccess: (uid: string, updates: Partial<AppUserAccess>) => void;
   deleteUserAccess: (uid: string) => boolean;
+  provisionStaffUser: (input: {
+    displayName: string;
+    identifier: string;
+    password?: string;
+    role: AppUserAccess['role'];
+    isReadOnly?: boolean;
+    permissions: Record<AppPermissionModule, boolean>;
+    status?: AppUserAccess['status'];
+    businessId?: string;
+    existingUid?: string;
+    oldAssignedPassword?: string;
+  }) => Promise<{ success: boolean; userAccess?: AppUserAccess; error?: string }>;
   // Multi-Business & SaaS Subscription Management
   activeBusinessId: string;
   saasRegistry: SaaSRegistryState;
@@ -1077,6 +1089,50 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     saasRegistry.partyAccounts,
     activeBusinessId,
     unlockedBusinessIds,
+  ]);
+
+  const needsAutoRoute = useMemo<boolean>(() => {
+    if (!currentUser || !authResolved || isRegistrySyncing) return false;
+    const email = (currentUser.email || '').toLowerCase().trim();
+    if (email === MAIN_SUPER_ADMIN_EMAIL.toLowerCase()) return false;
+
+    const partyAcc = (saasRegistry.partyAccounts || []).find(
+      (p) =>
+        (p.uid && p.uid === currentUser.uid) ||
+        normalizePartyLoginEmail(p.loginId) === email
+    );
+    if (partyAcc) {
+      return Boolean(partyAcc.businessId && partyAcc.businessId !== activeBusinessId);
+    }
+    if (email.endsWith('@party.makkahprinters.local')) return false;
+
+    const currentBiz = saasRegistry.businesses.find((b) => b.id === activeBusinessId);
+    const belongsToCurrent =
+      currentBiz &&
+      (currentBiz.ownerEmail?.toLowerCase().trim() === email ||
+        currentBiz.ownerUid === currentUser.uid ||
+        (currentBiz.memberEmails || []).some((m) => m.toLowerCase().trim() === email));
+    if (belongsToCurrent && currentBiz) return false;
+
+    const matchingBusinesses = saasRegistry.businesses.filter(
+      (b) =>
+        b.ownerEmail?.toLowerCase().trim() === email ||
+        b.ownerUid === currentUser.uid ||
+        (b.memberEmails || []).some((m) => m.toLowerCase().trim() === email)
+    );
+    const ownBiz =
+      matchingBusinesses.find((b) => b.id !== DEFAULT_BUSINESS_ID && b.status === 'approved') ||
+      matchingBusinesses.find((b) => b.id !== DEFAULT_BUSINESS_ID) ||
+      matchingBusinesses[0];
+    return Boolean(ownBiz && ownBiz.id !== activeBusinessId);
+  }, [
+    currentUser?.uid,
+    currentUser?.email,
+    authResolved,
+    isRegistrySyncing,
+    saasRegistry.businesses,
+    saasRegistry.partyAccounts,
+    activeBusinessId,
   ]);
 
   // READ-ONLY / VIEWER ENFORCEMENT
@@ -3447,7 +3503,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return true;
       }
       if (currentUserAccess.role === 'viewer') {
-        return true;
+        return !!currentUserAccess.permissions?.[module];
       }
       if (module === 'combinedAttendance') {
         if (currentUserAccess.permissions?.combinedAttendance !== undefined) {
@@ -3808,11 +3864,15 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return true;
   };
 
-  const syncStaffEmailToRegistry = (targetEmail: string, shouldInclude: boolean) => {
+  const syncStaffEmailToRegistry = (
+    targetEmail: string,
+    shouldInclude: boolean,
+    targetBusinessId: string = activeBusinessId
+  ) => {
     const cleanEmail = (targetEmail || '').toLowerCase().trim();
-    if (!cleanEmail || activeBusinessId === DEFAULT_BUSINESS_ID) return;
+    if (!cleanEmail) return;
     const reg = saasRegistryRef.current;
-    const targetBiz = reg.businesses.find((b) => b.id === activeBusinessId);
+    const targetBiz = reg.businesses.find((b) => b.id === targetBusinessId);
     if (!targetBiz) return;
     const ownerEmail = (targetBiz.ownerEmail || '').toLowerCase().trim();
     if (!shouldInclude && cleanEmail === ownerEmail) return;
@@ -3830,7 +3890,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     persistRegistryUpdate({
       ...reg,
       businesses: reg.businesses.map((b) =>
-        b.id === activeBusinessId ? { ...b, memberEmails: nextMembers, updatedAt: nowIso } : b
+        b.id === targetBusinessId ? { ...b, memberEmails: nextMembers, updatedAt: nowIso } : b
       ),
       updatedAt: nowIso,
     });
@@ -3857,7 +3917,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }),
     }));
     if (existing?.email && updates.status !== undefined) {
-      syncStaffEmailToRegistry(existing.email, updates.status === 'approved');
+      syncStaffEmailToRegistry(existing.email, updates.status === 'approved', activeBusinessId);
     }
   };
 
@@ -3873,9 +3933,215 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       ),
     }));
     if (existing?.email) {
-      syncStaffEmailToRegistry(existing.email, false);
+      syncStaffEmailToRegistry(existing.email, false, activeBusinessId);
     }
     return true;
+  };
+
+  const provisionStaffUser = async (input: {
+    displayName: string;
+    identifier: string;
+    password?: string;
+    role: AppUserAccess['role'];
+    isReadOnly?: boolean;
+    permissions: Record<AppPermissionModule, boolean>;
+    status?: AppUserAccess['status'];
+    businessId?: string;
+    existingUid?: string;
+    oldAssignedPassword?: string;
+  }): Promise<{ success: boolean; userAccess?: AppUserAccess; error?: string }> => {
+    if (guardReadOnly()) return { success: false, error: READONLY_ERR };
+    const canProvision =
+      isMainAdmin ||
+      isAdminPanelUnlocked ||
+      currentUserAccess?.role === 'super_admin' ||
+      currentUserAccess?.role === 'admin';
+    if (!canProvision) {
+      return {
+        success: false,
+        error: 'শুধুমাত্র সুপার অ্যাডমিন বা প্রেসের অ্যাডমিন নতুন ইউজার ও পাসওয়ার্ড তৈরি করতে পারবেন।',
+      };
+    }
+
+    const cleanName = (input.displayName || '').trim();
+    const rawIdentifier = (input.identifier || '').trim();
+    const cleanPwd = (input.password || '').trim();
+    const targetBizId = input.businessId || activeBusinessId;
+
+    if (!cleanName) {
+      return { success: false, error: 'কর্মচারী বা ব্যবহারকারীর নাম লিখুন।' };
+    }
+    if (!rawIdentifier) {
+      return { success: false, error: 'ইউজারনেম অথবা ইমেইল লিখুন।' };
+    }
+
+    const isUpdateOnly = Boolean(input.existingUid);
+    if (!isUpdateOnly && cleanPwd.length < 6) {
+      return { success: false, error: 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।' };
+    }
+    if (isUpdateOnly && cleanPwd.length > 0 && cleanPwd.length < 6) {
+      return { success: false, error: 'নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।' };
+    }
+
+    const email = normalizeIdentifierToEmail(rawIdentifier);
+    const loginUsername = !rawIdentifier.includes('@') ? rawIdentifier.toLowerCase() : undefined;
+    let resolvedUid = input.existingUid || '';
+
+    const needsAuthSync =
+      !isUpdateOnly || (cleanPwd.length >= 6 && cleanPwd !== (input.oldAssignedPassword || '').trim());
+
+    if (needsAuthSync) {
+      const secAuth = getSecondaryAuth();
+      try {
+        try {
+          const created = await createUserWithEmailAndPassword(secAuth, email, cleanPwd);
+          resolvedUid = created.user.uid;
+          if (cleanName) {
+            await updateProfile(created.user, { displayName: cleanName }).catch(() => {});
+          }
+        } catch (createErr: any) {
+          if (createErr?.code === 'auth/email-already-in-use') {
+            const candidatePwds = Array.from(
+              new Set([input.oldAssignedPassword?.trim(), cleanPwd].filter(Boolean) as string[])
+            );
+            let signedUser: User | null = null;
+            for (const tryPwd of candidatePwds) {
+              try {
+                const signed = await signInWithEmailAndPassword(secAuth, email, tryPwd);
+                signedUser = signed.user;
+                if (tryPwd !== cleanPwd && cleanPwd.length >= 6 && signed.user) {
+                  await updatePassword(signed.user, cleanPwd);
+                }
+                if (cleanName && signed.user) {
+                  await updateProfile(signed.user, { displayName: cleanName }).catch(() => {});
+                }
+                break;
+              } catch {
+                // try next candidate
+              }
+            }
+            if (signedUser) {
+              resolvedUid = signedUser.uid;
+            } else if (isUpdateOnly && input.existingUid) {
+              return {
+                success: false,
+                error:
+                  'এই একাউন্টটি আগে থেকেই গুগল/ভিন্ন পাসওয়ার্ড দিয়ে খোলা থাকায় পাসওয়ার্ড পরিবর্তন করা যায়নি। শুধু রোল ও পারমিশন আপডেট করতে পাসওয়ার্ড ঘরটি খালি রেখে সংরক্ষণ করুন।',
+              };
+            } else {
+              return {
+                success: false,
+                error:
+                  'এই ইউজারনেম বা ইমেইল দিয়ে ইতোমধ্যে একটি একাউন্ট খোলা আছে! ভিন্ন ইউজারনেম/ইমেইল দিন অথবা ওই একাউন্টের সঠিক পাসওয়ার্ড দিন।',
+              };
+            }
+          } else {
+            return {
+              success: false,
+              error: createErr?.message || 'ফায়ারবেসে ইউজার একাউন্ট তৈরি করা যায়নি।',
+            };
+          }
+        }
+      } finally {
+        try {
+          await signOut(secAuth);
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    const nowIso = new Date().toISOString();
+    const finalStatus: AppUserAccess['status'] = input.status || 'approved';
+    const nextEntry: AppUserAccess = {
+      uid: resolvedUid || `staff_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      email,
+      loginUsername,
+      assignedPassword:
+        cleanPwd || input.oldAssignedPassword || undefined,
+      displayName: cleanName,
+      status: finalStatus,
+      role: input.role,
+      isReadOnly: input.role === 'viewer' ? true : !!input.isReadOnly,
+      businessId: targetBizId,
+      permissions: { ...input.permissions },
+      requestedAt: nowIso,
+      approvedAt: finalStatus === 'approved' ? nowIso : undefined,
+      approvedBy:
+        finalStatus === 'approved' ? currentUser?.email || MAIN_SUPER_ADMIN_EMAIL : undefined,
+    };
+
+    const mergeIntoList = (list: AppUserAccess[]): AppUserAccess[] => {
+      const idx = list.findIndex(
+        (u) =>
+          (input.existingUid && u.uid === input.existingUid) ||
+          u.uid === nextEntry.uid ||
+          u.email.toLowerCase().trim() === email
+      );
+      if (idx >= 0) {
+        const prevItem = list[idx];
+        const updated = [...list];
+        updated[idx] = {
+          ...prevItem,
+          ...nextEntry,
+          requestedAt: prevItem.requestedAt || nowIso,
+          loginUsername: nextEntry.loginUsername ?? prevItem.loginUsername,
+          assignedPassword:
+            cleanPwd.length >= 6
+              ? cleanPwd
+              : nextEntry.assignedPassword ?? prevItem.assignedPassword,
+        };
+        return updated;
+      }
+      return [nextEntry, ...list];
+    };
+
+    if (targetBizId === activeBusinessId) {
+      const nextState: DatabaseState = {
+        ...dbRef.current,
+        userAccessList: mergeIntoList(dbRef.current.userAccessList || []),
+      };
+      setDb(nextState);
+      if (currentUser) {
+        await pushDatabaseToCloud(nextState, currentUser, true, targetBizId).catch(() => {});
+      }
+    } else if (isMainAdmin && currentUser) {
+      try {
+        const targetBizObj = saasRegistryRef.current.businesses.find((b) => b.id === targetBizId);
+        const docSnap = await getDoc(doc(firestoreDb, 'businesses', targetBizId));
+        let remoteDb: DatabaseState | null = null;
+        if (docSnap.exists()) {
+          remoteDb = await fetchDatabaseFromCloud(docSnap.data(), targetBizId);
+        }
+        const baseDb: DatabaseState = remoteDb || {
+          ...initialEmptyState,
+          settings: {
+            ...defaultSettings,
+            name: targetBizObj?.name || defaultSettings.name,
+            nameEn: targetBizObj?.nameEn || targetBizObj?.name || defaultSettings.nameEn,
+            address: targetBizObj?.address || '',
+            phone: targetBizObj?.phone || '',
+            email: targetBizObj?.ownerEmail || '',
+            adminEmail: targetBizObj?.ownerEmail || '',
+            isConfigured: true,
+          },
+        };
+        const updatedRemoteDb: DatabaseState = {
+          ...baseDb,
+          userAccessList: mergeIntoList(baseDb.userAccessList || []),
+        };
+        await pushDatabaseToCloud(updatedRemoteDb, currentUser, true, targetBizId);
+      } catch (err: any) {
+        console.warn('Cross-business staff provisioning warning:', err);
+        return {
+          success: false,
+          error: 'নির্বাচিত প্রেসের ডাটাবেজে ইউজার সংরক্ষণ করতে সমস্যা হয়েছে।',
+        };
+      }
+    }
+
+    syncStaffEmailToRegistry(email, finalStatus === 'approved', targetBizId);
+    return { success: true, userAccess: nextEntry };
   };
 
   // DATA MANAGEMENT
@@ -4523,6 +4789,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       clearCloudSyncSessionCache();
       const email = normalizeIdentifierToEmail(identifier);
       const res = await signInWithEmailAndPassword(auth, email, password);
+      if (res.user) {
+        await completeGoogleAuthSession(res.user);
+      }
       return { success: true, user: res.user };
     } catch (err: any) {
       console.warn('Email/Password Login error', err);
@@ -5486,7 +5755,13 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       storageStats,
       currentUser,
       authResolved,
-      isCloudHydrating: Boolean(currentUser && (isRegistrySyncing || isCloudDataSyncing)),
+      isCloudHydrating: Boolean(
+        currentUser &&
+          (isRegistrySyncing ||
+            isCloudDataSyncing ||
+            needsAutoRoute ||
+            loadedBusinessIdRef.current !== activeBusinessId)
+      ),
       loginWithGoogle,
       loginWithEmailOrUsername,
       signupWithEmailOrUsername,
@@ -5519,6 +5794,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       canAccessModule,
       updateUserAccess,
       deleteUserAccess,
+      provisionStaffUser,
       activeBusinessId,
       saasRegistry,
       currentBusiness,
@@ -5556,6 +5832,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       authResolved,
       isRegistrySyncing,
       isCloudDataSyncing,
+      needsAutoRoute,
       cloudSyncStatus,
       isQuotaExceeded,
       isQuotaDismissed,
