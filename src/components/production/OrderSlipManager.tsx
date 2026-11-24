@@ -4,6 +4,7 @@ import { OrderSlip, OrderSlipItem, ProductionItemType } from '../../types';
 import { calculateProductionMetrics, formatDate, formatNumber } from '../../utils/calculations';
 import { PrintHeader, triggerPrint } from '../common/PrintHeader';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 import {
   ClipboardList,
   Plus,
@@ -1257,14 +1258,15 @@ export const OrderSlipManager: React.FC = () => {
                       <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
                         ফর্মা *
                       </label>
-                      <input
-                        type="number"
-                        min={1}
+                      <SmartNumberInput
+                        integer
+                        min={0}
+                        fallbackOnBlur={0}
                         value={newBookForm.forma}
-                        onChange={(e) =>
+                        onValueChange={(val) =>
                           setNewBookForm({
                             ...newBookForm,
-                            forma: parseInt(e.target.value, 10) || 1,
+                            forma: val,
                           })
                         }
                         className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-center"
@@ -1274,14 +1276,15 @@ export const OrderSlipManager: React.FC = () => {
                       <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
                         প্লেট *
                       </label>
-                      <input
-                        type="number"
-                        min={1}
+                      <SmartNumberInput
+                        integer
+                        min={0}
+                        fallbackOnBlur={0}
                         value={newBookForm.plates}
-                        onChange={(e) =>
+                        onValueChange={(val) =>
                           setNewBookForm({
                             ...newBookForm,
-                            plates: parseInt(e.target.value, 10) || 4,
+                            plates: val,
                           })
                         }
                         className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-center"
@@ -1418,11 +1421,12 @@ export const OrderSlipManager: React.FC = () => {
                   <label className="block text-xs font-bold text-slate-700 mb-1 text-center">
                     ফর্মা
                   </label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
+                    integer
                     min={1}
+                    fallbackOnBlur={1}
                     value={itemForma}
-                    onChange={(e) => setItemForma(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    onValueChange={(v) => setItemForma(Math.max(1, v))}
                     className="w-full border border-slate-300 rounded-xl px-2 py-2 text-xs font-black text-center bg-white"
                   />
                 </div>
@@ -1432,11 +1436,11 @@ export const OrderSlipManager: React.FC = () => {
                   <label className="block text-xs font-bold text-slate-700 mb-1 text-center">
                     প্লেট
                   </label>
-                  <input
-                    type="number"
-                    min={1}
+                  <SmartNumberInput
+                    integer
+                    min={0}
                     value={itemPlates}
-                    onChange={(e) => setItemPlates(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    onValueChange={setItemPlates}
                     className="w-full border border-slate-300 rounded-xl px-2 py-2 text-xs font-black text-center bg-white"
                   />
                 </div>
@@ -1446,11 +1450,12 @@ export const OrderSlipManager: React.FC = () => {
                   <label className="block text-xs font-bold text-indigo-950 mb-1">
                     ছাপানোর অর্ডার কপি *
                   </label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
+                    integer
                     min={1}
+                    fallbackOnBlur={1}
                     value={itemCopies}
-                    onChange={(e) => setItemCopies(Math.max(1, parseInt(e.target.value, 10) || 0))}
+                    onValueChange={setItemCopies}
                     className="w-full border-2 border-indigo-400 rounded-xl px-3 py-1.5 text-sm font-black text-indigo-900 text-center bg-white focus:outline-indigo-600"
                   />
                 </div>
@@ -1674,13 +1679,12 @@ export const OrderSlipManager: React.FC = () => {
                             {formatNumber(it.plates, lang, numFmt)}
                           </td>
                           <td className="p-2.5 text-center">
-                            <input
-                              type="number"
-                              min={1}
+                            <SmartNumberInput
+                              integer
+                              min={0}
+                              fallbackOnBlur={0}
                               value={it.copies}
-                              onChange={(e) =>
-                                handleUpdateSlipItemCopies(it.id, parseInt(e.target.value, 10) || 1)
-                              }
+                              onValueChange={(val) => handleUpdateSlipItemCopies(it.id, val)}
                               className="w-24 border border-indigo-300 rounded-lg px-2 py-1 text-xs font-black text-center text-indigo-900"
                             />
                           </td>

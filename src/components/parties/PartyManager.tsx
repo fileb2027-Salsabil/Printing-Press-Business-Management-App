@@ -5,6 +5,7 @@ import { formatCurrency, formatDate, formatNumber, toBanglaDigits } from '../../
 import { translations } from '../../utils/i18n';
 import { PrintHeader, PrintSignatures, triggerPrint } from '../common/PrintHeader';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 import {
   Users,
   Plus,
@@ -871,10 +872,11 @@ export const PartyManager: React.FC<PartyManagerProps> = ({
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">ডিফল্ট রেট (৳)</label>
-                    <input
-                      type="number"
+                    <SmartNumberInput
+                      min={0}
+                      fallbackOnBlur={0}
                       value={bookForm.defaultRate}
-                      onChange={(e) => setBookForm({ ...bookForm, defaultRate: parseFloat(e.target.value) || 0 })}
+                      onValueChange={(val) => setBookForm({ ...bookForm, defaultRate: val })}
                       className="w-full border rounded-lg p-2 text-sm"
                     />
                   </div>
@@ -882,19 +884,23 @@ export const PartyManager: React.FC<PartyManagerProps> = ({
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">ফর্মা সংখ্যা</label>
-                    <input
-                      type="number"
+                    <SmartNumberInput
+                      integer
+                      min={0}
+                      fallbackOnBlur={0}
                       value={bookForm.forma}
-                      onChange={(e) => setBookForm({ ...bookForm, forma: parseInt(e.target.value, 10) || 1 })}
+                      onValueChange={(val) => setBookForm({ ...bookForm, forma: val })}
                       className="w-full border rounded-lg p-2 text-sm"
                     />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">প্লেট সংখ্যা</label>
-                    <input
-                      type="number"
+                    <SmartNumberInput
+                      integer
+                      min={0}
+                      fallbackOnBlur={0}
                       value={bookForm.plates}
-                      onChange={(e) => setBookForm({ ...bookForm, plates: parseInt(e.target.value, 10) || 4 })}
+                      onValueChange={(val) => setBookForm({ ...bookForm, plates: val })}
                       className="w-full border rounded-lg p-2 text-sm"
                     />
                   </div>
@@ -964,12 +970,12 @@ export const PartyManager: React.FC<PartyManagerProps> = ({
               <form onSubmit={handleSaveCollection} className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">জমার পরিমাণ (টাকা) *</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
                     required
-                    min="1"
+                    min={0}
+                    fallbackOnBlur={0}
                     value={collectionForm.amount}
-                    onChange={(e) => setCollectionForm({ ...collectionForm, amount: parseFloat(e.target.value) || 0 })}
+                    onValueChange={(val) => setCollectionForm({ ...collectionForm, amount: val })}
                     className="w-full border rounded-lg p-2.5 text-base font-bold text-emerald-800"
                   />
                 </div>
@@ -1476,10 +1482,11 @@ export const PartyManager: React.FC<PartyManagerProps> = ({
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">প্রাথমিক বকেয়া (৳)</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
+                    min={0}
+                    fallbackOnBlur={0}
                     value={partyForm.openingDue}
-                    onChange={(e) => setPartyForm({ ...partyForm, openingDue: parseFloat(e.target.value) || 0 })}
+                    onValueChange={(val) => setPartyForm({ ...partyForm, openingDue: val })}
                     className="w-full border rounded-lg p-2 text-sm"
                   />
                 </div>

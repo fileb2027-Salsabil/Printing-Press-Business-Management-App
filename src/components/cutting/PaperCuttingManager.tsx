@@ -10,6 +10,7 @@ import { validateAndProcessImage } from '../../utils/imageUpload';
 import { translations } from '../../utils/i18n';
 import { PrintHeader, PrintSignatures, PrintAmountInWords, triggerPrint } from '../common/PrintHeader';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 import { CuttingWorkerLedgerModal } from './CuttingWorkerLedgerModal';
 import { CuttingPaymentModal } from './CuttingPaymentModal';
 import {
@@ -690,23 +691,23 @@ export const PaperCuttingManager: React.FC = () => {
               <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">কাটা রিমের সংখ্যা *</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
                     required
-                    min="1"
+                    min={0}
+                    fallbackOnBlur={0}
                     value={recordForm.reams}
-                    onChange={(e) => setRecordForm({ ...recordForm, reams: parseFloat(e.target.value) || 0 })}
+                    onValueChange={(val) => setRecordForm({ ...recordForm, reams: val })}
                     className="w-full border rounded p-2 text-sm font-bold text-center"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">প্রতি রিমের দর (৳) *</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
                     required
-                    min="1"
+                    min={0}
+                    fallbackOnBlur={0}
                     value={recordForm.ratePerReam}
-                    onChange={(e) => setRecordForm({ ...recordForm, ratePerReam: parseFloat(e.target.value) || 0 })}
+                    onValueChange={(val) => setRecordForm({ ...recordForm, ratePerReam: val })}
                     className="w-full border rounded p-2 text-sm font-bold text-center"
                   />
                 </div>
@@ -783,16 +784,16 @@ export const PaperCuttingManager: React.FC = () => {
                     <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                       এখন কত টাকা পরিশোধ করা হয়েছে? (৳) *
                     </label>
-                    <input
-                      type="number"
+                    <SmartNumberInput
                       required
-                      min="0"
+                      min={0}
                       max={calculateCuttingCost(recordForm.reams, recordForm.ratePerReam)}
+                      fallbackOnBlur={0}
                       value={recordForm.paidAmount}
-                      onChange={(e) =>
+                      onValueChange={(val) =>
                         setRecordForm({
                           ...recordForm,
-                          paidAmount: parseFloat(e.target.value) || 0,
+                          paidAmount: val,
                         })
                       }
                       className="w-full border rounded p-1.5 text-xs font-bold"
@@ -896,10 +897,11 @@ export const PaperCuttingManager: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">ডিফল্ট দর (৳/রিম)</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
+                    min={0}
+                    fallbackOnBlur={0}
                     value={workerForm.defaultRatePerReam}
-                    onChange={(e) => setWorkerForm({ ...workerForm, defaultRatePerReam: parseFloat(e.target.value) || 25 })}
+                    onValueChange={(val) => setWorkerForm({ ...workerForm, defaultRatePerReam: val })}
                     className="w-full border rounded-lg p-2 text-xs"
                   />
                 </div>

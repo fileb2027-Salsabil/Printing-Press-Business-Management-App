@@ -13,6 +13,7 @@ import {
 import { formatDate } from '../../utils/calculations';
 import { DEFAULT_BUSINESS_ID } from '../../utils/cloudSync';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 import {
   Building2,
   CheckCircle2,
@@ -1804,18 +1805,18 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">ফ্রি ট্রায়াল দিন (Days)</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
+                    integer
                     min={0}
                     value={platformForm.defaultTrialDays}
-                    onChange={(e) => {
-                      const days = Math.max(0, parseInt(e.target.value, 10) || 0);
+                    onValueChange={(days) => {
+                      const safeDays = Math.max(0, days);
                       setPlatformForm((prev) => ({
                         ...prev,
-                        defaultTrialDays: days,
+                        defaultTrialDays: safeDays,
                         plans: {
                           ...prev.plans,
-                          trial: { ...prev.plans.trial, durationDays: days },
+                          trial: { ...prev.plans.trial, durationDays: safeDays },
                         },
                       }));
                     }}
@@ -1830,16 +1831,17 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[11px] text-slate-600 mb-1">দিন</label>
-                    <input
-                      type="number"
+                    <SmartNumberInput
+                      integer
                       min={1}
+                      fallbackOnBlur={30}
                       value={platformForm.plans.monthly.durationDays || 30}
-                      onChange={(e) =>
+                      onValueChange={(v) =>
                         setPlatformForm((p) => ({
                           ...p,
                           plans: {
                             ...p.plans,
-                            monthly: { ...p.plans.monthly, durationDays: parseInt(e.target.value, 10) || 30 },
+                            monthly: { ...p.plans.monthly, durationDays: Math.max(1, v) },
                           },
                         }))
                       }
@@ -1848,16 +1850,15 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-600 mb-1">মূল্য (৳)</label>
-                    <input
-                      type="number"
+                    <SmartNumberInput
                       min={0}
                       value={platformForm.plans.monthly.basePrice}
-                      onChange={(e) =>
+                      onValueChange={(v) =>
                         setPlatformForm((p) => ({
                           ...p,
                           plans: {
                             ...p.plans,
-                            monthly: { ...p.plans.monthly, basePrice: parseFloat(e.target.value) || 0 },
+                            monthly: { ...p.plans.monthly, basePrice: v },
                           },
                         }))
                       }
@@ -1873,16 +1874,17 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[11px] text-slate-600 mb-1">দিন</label>
-                    <input
-                      type="number"
+                    <SmartNumberInput
+                      integer
                       min={1}
+                      fallbackOnBlur={365}
                       value={platformForm.plans.yearly.durationDays || 365}
-                      onChange={(e) =>
+                      onValueChange={(v) =>
                         setPlatformForm((p) => ({
                           ...p,
                           plans: {
                             ...p.plans,
-                            yearly: { ...p.plans.yearly, durationDays: parseInt(e.target.value, 10) || 365 },
+                            yearly: { ...p.plans.yearly, durationDays: Math.max(1, v) },
                           },
                         }))
                       }
@@ -1891,16 +1893,15 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-600 mb-1">মূল্য (৳)</label>
-                    <input
-                      type="number"
+                    <SmartNumberInput
                       min={0}
                       value={platformForm.plans.yearly.basePrice}
-                      onChange={(e) =>
+                      onValueChange={(v) =>
                         setPlatformForm((p) => ({
                           ...p,
                           plans: {
                             ...p.plans,
-                            yearly: { ...p.plans.yearly, basePrice: parseFloat(e.target.value) || 0 },
+                            yearly: { ...p.plans.yearly, basePrice: v },
                           },
                         }))
                       }
@@ -1915,16 +1916,15 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
                 <span className="font-bold text-purple-900 block">এককালীন / আজীবন (One-Time)</span>
                 <div>
                   <label className="block text-[11px] text-slate-600 mb-1">প্যাকেজ মূল্য (৳)</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
                     min={0}
                     value={platformForm.plans.one_time.basePrice}
-                    onChange={(e) =>
+                    onValueChange={(v) =>
                       setPlatformForm((p) => ({
                         ...p,
                         plans: {
                           ...p.plans,
-                          one_time: { ...p.plans.one_time, basePrice: parseFloat(e.target.value) || 0 },
+                          one_time: { ...p.plans.one_time, basePrice: v },
                         },
                       }))
                     }
@@ -2180,11 +2180,10 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">প্যাকেজ মূল্য (৳)</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
                     min={0}
                     value={editCustomPrice}
-                    onChange={(e) => setEditCustomPrice(parseFloat(e.target.value) || 0)}
+                    onValueChange={setEditCustomPrice}
                     className="w-full px-2.5 py-2 border border-slate-300 rounded-lg bg-white font-bold"
                   />
                 </div>
@@ -2212,22 +2211,20 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
                       </button>
                     </div>
                   </div>
-                  <input
-                    type="number"
+                  <SmartNumberInput
                     min={0}
                     max={editDiscountType === 'percent' ? 100 : undefined}
                     value={editDiscountValue}
-                    onChange={(e) => setEditDiscountValue(parseFloat(e.target.value) || 0)}
+                    onValueChange={setEditDiscountValue}
                     className="w-full px-2.5 py-2 border border-emerald-300 rounded-lg bg-white font-bold text-emerald-700"
                   />
                 </div>
                 <div>
                   <label className="block font-bold text-indigo-700 mb-1">জমা টাকা (৳)</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
                     min={0}
                     value={editPaid}
-                    onChange={(e) => setEditPaid(parseFloat(e.target.value) || 0)}
+                    onValueChange={setEditPaid}
                     className="w-full px-2.5 py-2 border border-indigo-300 rounded-lg bg-white font-bold text-indigo-700"
                   />
                 </div>
@@ -2255,11 +2252,12 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
                     নতুন মেয়াদ নির্ধারণ (আজ থেকে কত দিন চলবে)
                   </label>
                   <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      type="number"
-                      min={1}
+                    <SmartNumberInput
+                      integer
+                      min={0}
+                      clearableToEmpty
                       value={editRenewDays}
-                      onChange={(e) => setEditRenewDays(e.target.value)}
+                      onTextValueChange={setEditRenewDays}
                       placeholder="দিন লিখুন (যেমন: 30)"
                       className="flex-1 min-w-[100px] px-3 py-2 border border-slate-300 rounded-xl font-bold"
                     />

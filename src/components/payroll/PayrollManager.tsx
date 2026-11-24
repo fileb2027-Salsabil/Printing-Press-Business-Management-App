@@ -5,6 +5,7 @@ import { formatCurrency, formatDate, getDaysInMonth, sortEmployeesByDesignation,
 import { translations } from '../../utils/i18n';
 import { PrintHeader, PrintSignatures, PrintAmountInWords, triggerPrint } from '../common/PrintHeader';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 import {
   Banknote,
   Plus,
@@ -746,10 +747,15 @@ export const PayrollManager: React.FC = () => {
                 ))}
               </select>
 
-              <input
-                type="number"
+              <SmartNumberInput
+                integer
+                min={2000}
+                max={2100}
+                fallbackOnBlur={new Date().getFullYear()}
                 value={selectedYear}
-                onChange={(e) => setSelectedYear(parseInt(e.target.value, 10) || 2026)}
+                onValueChange={(val) => {
+                  if (val >= 2000 && val <= 2100) setSelectedYear(val);
+                }}
                 className="border rounded p-1.5 text-xs font-bold w-20 text-center bg-white"
               />
             </div>
@@ -1151,15 +1157,15 @@ export const PayrollManager: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">টাকার পরিমাণ (৳) *</label>
-                <input
-                  type="number"
+                <SmartNumberInput
                   required
-                  min="1"
+                  min={0}
+                  clearableToEmpty
                   value={advanceForm.amount}
-                  onChange={(e) =>
+                  onTextValueChange={(s) =>
                     setAdvanceForm({
                       ...advanceForm,
-                      amount: e.target.value === '' ? '' : parseFloat(e.target.value),
+                      amount: s === '' ? '' : Number.isFinite(parseFloat(s)) ? parseFloat(s) : '',
                     })
                   }
                   className="w-full border rounded-lg p-2.5 text-base font-black text-purple-900 bg-white"
@@ -1258,13 +1264,13 @@ export const PayrollManager: React.FC = () => {
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                     উপস্থিত দিন ({editingPayroll.daysInMonth} দিনের মধ্যে)
                   </label>
-                  <input
-                    type="number"
-                    min="0"
+                  <SmartNumberInput
+                    integer
+                    min={0}
                     max={editingPayroll.daysInMonth}
+                    fallbackOnBlur={0}
                     value={payrollForm.presentDays}
-                    onChange={(e) => {
-                      const d = parseInt(e.target.value, 10) || 0;
+                    onValueChange={(d) => {
                       const dailyRate = editingPayroll.basicSalary / editingPayroll.daysInMonth;
                       setPayrollForm({
                         ...payrollForm,
@@ -1279,13 +1285,14 @@ export const PayrollManager: React.FC = () => {
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                     হাজিরা বেতন (৳)
                   </label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
+                    min={0}
+                    fallbackOnBlur={0}
                     value={payrollForm.attendanceSalary}
-                    onChange={(e) =>
+                    onValueChange={(val) =>
                       setPayrollForm({
                         ...payrollForm,
-                        attendanceSalary: parseFloat(e.target.value) || 0,
+                        attendanceSalary: val,
                       })
                     }
                     className="w-full border rounded p-1.5 text-xs font-bold text-slate-900 bg-white"
@@ -1298,13 +1305,14 @@ export const PayrollManager: React.FC = () => {
                   <label className="block text-[11px] font-semibold text-emerald-800 mb-1">
                     হাজিরা বোনাস (৳)
                   </label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
+                    min={0}
+                    fallbackOnBlur={0}
                     value={payrollForm.attendanceBonus}
-                    onChange={(e) =>
+                    onValueChange={(val) =>
                       setPayrollForm({
                         ...payrollForm,
-                        attendanceBonus: parseFloat(e.target.value) || 0,
+                        attendanceBonus: val,
                       })
                     }
                     className="w-full border rounded p-1.5 text-xs font-bold text-emerald-800 bg-white"
@@ -1314,13 +1322,14 @@ export const PayrollManager: React.FC = () => {
                   <label className="block text-[11px] font-semibold text-amber-800 mb-1">
                     ওভারটাইম টাকা (OT ৳)
                   </label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
+                    min={0}
+                    fallbackOnBlur={0}
                     value={payrollForm.otPay}
-                    onChange={(e) =>
+                    onValueChange={(val) =>
                       setPayrollForm({
                         ...payrollForm,
-                        otPay: parseFloat(e.target.value) || 0,
+                        otPay: val,
                       })
                     }
                     className="w-full border rounded p-1.5 text-xs font-bold text-amber-800 bg-white"
@@ -1388,14 +1397,14 @@ export const PayrollManager: React.FC = () => {
                           </button>
                         )}
                       </div>
-                      <input
-                        type="number"
-                        min="0"
+                      <SmartNumberInput
+                        min={0}
+                        fallbackOnBlur={0}
                         value={payrollForm.previousUnpaidSalaryAdded}
-                        onChange={(e) =>
+                        onValueChange={(val) =>
                           setPayrollForm({
                             ...payrollForm,
-                            previousUnpaidSalaryAdded: Math.round(parseFloat(e.target.value) || 0),
+                            previousUnpaidSalaryAdded: Math.round(val),
                           })
                         }
                         className="w-full border rounded p-1.5 text-xs font-bold text-blue-900 bg-white"
@@ -1511,13 +1520,12 @@ export const PayrollManager: React.FC = () => {
                               </button>
                             </div>
                           </div>
-                          <input
-                            type="number"
-                            min="0"
+                          <SmartNumberInput
+                            min={0}
                             max={payrollForm.totalAdvanceAvailable}
+                            fallbackOnBlur={0}
                             value={payrollForm.advanceDeduction}
-                            onChange={(e) => {
-                              const amt = parseFloat(e.target.value) || 0;
+                            onValueChange={(amt) => {
                               const bounded = Math.min(payrollForm.totalAdvanceAvailable, Math.max(0, amt));
                               setPayrollForm({
                                 ...payrollForm,
@@ -1576,13 +1584,14 @@ export const PayrollManager: React.FC = () => {
                 <label className="block text-[11px] font-semibold text-rose-700 mb-1">
                   অন্যান্য কর্তন (৳)
                 </label>
-                <input
-                  type="number"
+                <SmartNumberInput
+                  min={0}
+                  fallbackOnBlur={0}
                   value={payrollForm.otherDeductions}
-                  onChange={(e) =>
+                  onValueChange={(val) =>
                     setPayrollForm({
                       ...payrollForm,
-                      otherDeductions: parseFloat(e.target.value) || 0,
+                      otherDeductions: val,
                     })
                   }
                   className="w-full border rounded p-1.5 text-xs font-bold text-rose-700 bg-white"

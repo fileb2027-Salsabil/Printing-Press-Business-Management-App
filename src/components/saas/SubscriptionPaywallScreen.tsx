@@ -19,6 +19,7 @@ import {
   AlertCircle,
   Wallet,
 } from 'lucide-react';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 
 interface SubscriptionPaywallScreenProps {
   onNavigateDashboard?: () => void;
@@ -435,12 +436,11 @@ export const SubscriptionPaywallScreen: React.FC<SubscriptionPaywallScreenProps>
                     <label className="block font-bold text-slate-700 mb-1">
                       প্রেরিত টাকা (৳) *
                     </label>
-                    <input
-                      type="number"
+                    <SmartNumberInput
                       min={0}
                       required
                       value={paidAmount}
-                      onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)}
+                      onValueChange={setPaidAmount}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-black text-emerald-700"
                     />
                   </div>

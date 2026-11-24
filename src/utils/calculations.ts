@@ -343,6 +343,29 @@ export function toBanglaDigits(value: number | string): string {
   return String(value).replace(/[0-9]/g, (digit) => banglaDigits[parseInt(digit, 10)]);
 }
 
+/**
+ * Convert Bengali (০-৯) or Arabic-Indic (٠-٩) digits to ASCII English digits (0-9)
+ */
+export function toEnglishDigits(value: number | string): string {
+  const str = String(value ?? '');
+  return str
+    .replace(/[০-৯]/g, (d) => String(d.charCodeAt(0) - 0x09e6))
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660));
+}
+
+/**
+ * Parse number cleanly from localized Bengali/English numeric input string
+ */
+export function parseLocalizedNumber(value: number | string, fallback: number = 0): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : fallback;
+  const normalized = toEnglishDigits(value).replace(/,/g, '').trim();
+  if (!normalized || normalized === '-' || normalized === '.' || normalized === '-.') {
+    return fallback;
+  }
+  const parsed = parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 let activeGlobalNumberFormat: 'bn' | 'en' = 'bn';
 
 export function setActiveNumberFormat(fmt?: 'bn' | 'en') {

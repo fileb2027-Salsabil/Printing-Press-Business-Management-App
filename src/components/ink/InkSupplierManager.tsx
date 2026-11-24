@@ -5,6 +5,7 @@ import { formatCurrency, formatDate, formatNumber } from '../../utils/calculatio
 import { PrintHeader, PrintSignatures, triggerPrint } from '../common/PrintHeader';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { PhoneLink } from '../common/PhoneLink';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 import {
   Droplet,
   Plus,
@@ -1399,14 +1400,10 @@ export const InkSupplierManager: React.FC = () => {
 
                 <div>
                   <label className="block text-slate-700 font-bold mb-1">পরিমাণ *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    value={purchaseForm.quantity || ''}
-                    onChange={(e) =>
-                      setPurchaseForm({ ...purchaseForm, quantity: parseFloat(e.target.value) || 0 })
-                    }
+                  <SmartNumberInput
+                    min={0}
+                    value={purchaseForm.quantity}
+                    onValueChange={(v) => setPurchaseForm({ ...purchaseForm, quantity: v })}
                     required
                     className="w-full px-2.5 py-2 border border-slate-300 rounded-xl font-bold text-right focus:outline-emerald-500"
                   />
@@ -1414,14 +1411,10 @@ export const InkSupplierManager: React.FC = () => {
 
                 <div>
                   <label className="block text-slate-700 font-bold mb-1">দর (প্রতি একক) *</label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    value={purchaseForm.unitPrice || ''}
-                    onChange={(e) =>
-                      setPurchaseForm({ ...purchaseForm, unitPrice: parseFloat(e.target.value) || 0 })
-                    }
+                  <SmartNumberInput
+                    min={0}
+                    value={purchaseForm.unitPrice}
+                    onValueChange={(v) => setPurchaseForm({ ...purchaseForm, unitPrice: v })}
                     required
                     className="w-full px-2.5 py-2 border border-slate-300 rounded-xl font-bold text-right focus:outline-emerald-500"
                   />
@@ -1488,14 +1481,11 @@ export const InkSupplierManager: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3 bg-amber-50/50 p-3 rounded-xl border border-amber-200">
                   <div>
                     <label className="block text-amber-900 font-bold mb-1">এখন কত টাকা পরিশোধ করলেন?</label>
-                    <input
-                      type="number"
-                      min="1"
+                    <SmartNumberInput
+                      min={0}
                       max={Math.round(purchaseForm.quantity * purchaseForm.unitPrice)}
-                      value={purchaseForm.paidAmount || ''}
-                      onChange={(e) =>
-                        setPurchaseForm({ ...purchaseForm, paidAmount: parseFloat(e.target.value) || 0 })
-                      }
+                      value={purchaseForm.paidAmount}
+                      onValueChange={(v) => setPurchaseForm({ ...purchaseForm, paidAmount: v })}
                       required
                       className="w-full px-3 py-2 border border-amber-300 rounded-xl font-bold text-right bg-white"
                     />
@@ -1678,15 +1668,11 @@ export const InkSupplierManager: React.FC = () => {
                   <label className="block text-slate-700 font-bold mb-1">
                     পূর্বের বাকি (Opening Due)
                   </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
+                  <SmartNumberInput
+                    min={0}
                     placeholder="০"
-                    value={supplierForm.openingDue || ''}
-                    onChange={(e) =>
-                      setSupplierForm({ ...supplierForm, openingDue: parseFloat(e.target.value) || 0 })
-                    }
+                    value={supplierForm.openingDue}
+                    onValueChange={(v) => setSupplierForm({ ...supplierForm, openingDue: v })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-right focus:outline-emerald-500"
                   />
                 </div>
@@ -1799,15 +1785,11 @@ export const InkSupplierManager: React.FC = () => {
 
                 <div>
                   <label className="block text-slate-700 font-bold mb-1">পরিশোধের পরিমাণ *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
+                  <SmartNumberInput
+                    min={0}
                     placeholder="৳ ০"
-                    value={paymentForm.amount || ''}
-                    onChange={(e) =>
-                      setPaymentForm({ ...paymentForm, amount: parseFloat(e.target.value) || 0 })
-                    }
+                    value={paymentForm.amount}
+                    onValueChange={(v) => setPaymentForm({ ...paymentForm, amount: v })}
                     required
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-right text-emerald-700 focus:outline-blue-500"
                   />

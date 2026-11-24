@@ -6,6 +6,7 @@ import { validateAndProcessImage } from '../../utils/imageUpload';
 import { translations } from '../../utils/i18n';
 import { PrintHeader, PrintSignatures, PrintAmountInWords, triggerPrint } from '../common/PrintHeader';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 import {
   UserCheck,
   Plus,
@@ -609,12 +610,12 @@ export const EmployeeManager: React.FC = () => {
               <form onSubmit={(e) => handleSaveAdvance(e, false)} className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">টাকার পরিমাণ (৳) *</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
                     required
-                    min="1"
-                    value={advanceForm.amount || ''}
-                    onChange={(e) => setAdvanceForm({ ...advanceForm, amount: parseFloat(e.target.value) || 0 })}
+                    min={0}
+                    fallbackOnBlur={0}
+                    value={advanceForm.amount}
+                    onValueChange={(val) => setAdvanceForm({ ...advanceForm, amount: val })}
                     className="w-full border rounded-lg p-2.5 text-base font-bold text-purple-800"
                     placeholder="৳ টাকার অংক"
                   />
@@ -955,21 +956,23 @@ export const EmployeeManager: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">মাসিক মূল বেতন (৳) *</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
                     required
-                    min="1"
+                    min={0}
+                    fallbackOnBlur={0}
                     value={form.monthlyBasicSalary}
-                    onChange={(e) => setForm({ ...form, monthlyBasicSalary: parseFloat(e.target.value) || 0 })}
+                    onValueChange={(val) => setForm({ ...form, monthlyBasicSalary: val })}
                     className="w-full border rounded-lg p-2 text-xs font-bold text-emerald-800"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">স্বাভাবিক কর্মঘণ্টা</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
+                    integer
+                    min={0}
+                    fallbackOnBlur={208}
                     value={form.standardMonthlyHours}
-                    onChange={(e) => setForm({ ...form, standardMonthlyHours: parseInt(e.target.value, 10) || 208 })}
+                    onValueChange={(val) => setForm({ ...form, standardMonthlyHours: val })}
                     className="w-full border rounded-lg p-2 text-xs"
                   />
                 </div>

@@ -5,6 +5,7 @@ import { formatDate } from '../../utils/calculations';
 import { translations } from '../../utils/i18n';
 import { PrintHeader, PrintSignatures, triggerPrint } from '../common/PrintHeader';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 import {
   Disc,
   Plus,
@@ -939,13 +940,14 @@ export const PlateManager: React.FC = () => {
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     প্লেট সংখ্যা *
                   </label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
+                    integer
                     required
-                    min="1"
+                    min={0}
+                    clearableToEmpty
                     value={plateCount}
-                    onChange={(e) =>
-                      setPlateCount(e.target.value === '' ? '' : parseInt(e.target.value, 10))
+                    onTextValueChange={(s) =>
+                      setPlateCount(s === '' ? '' : Number.isFinite(parseInt(s, 10)) ? parseInt(s, 10) : '')
                     }
                     className="w-full border rounded-lg p-2 text-xs font-bold text-slate-900"
                   />

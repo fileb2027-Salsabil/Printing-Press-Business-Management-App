@@ -5,6 +5,7 @@ import { formatDate } from '../../utils/calculations';
 import { translations } from '../../utils/i18n';
 import { PrintHeader, PrintSignatures, triggerPrint } from '../common/PrintHeader';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 import {
   Package,
   Plus,
@@ -786,17 +787,16 @@ export const PaperStockManager: React.FC = () => {
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     কত রিম (পরিমাণ) *
                   </label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
                     required
-                    step="0.5"
-                    min="0.5"
+                    min={0}
+                    clearableToEmpty
                     placeholder="রিম সংখ্যা"
                     value={form.reams}
-                    onChange={(e) =>
+                    onTextValueChange={(s) =>
                       setForm({
                         ...form,
-                        reams: e.target.value === '' ? '' : parseFloat(e.target.value),
+                        reams: s === '' ? '' : Number.isFinite(parseFloat(s)) ? parseFloat(s) : '',
                       })
                     }
                     className="w-full border rounded-lg p-2 text-xs font-bold text-emerald-800 bg-white"

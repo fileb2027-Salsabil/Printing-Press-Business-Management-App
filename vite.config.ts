@@ -8,9 +8,37 @@ import { VitePWA } from 'vite-plugin-pwa';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(() => {
+  const hmrDisabled = process.env.DISABLE_HMR === 'true';
+
   return {
     base: '/',
     plugins: [
+      {
+        name: 'pwa-hmr-safe-guard',
+        enforce: 'pre',
+        apply: 'serve',
+        resolveId(id) {
+          if (hmrDisabled && id === '/@vite-plugin-pwa/pwa-entry-point-loaded') {
+            return '\0/@vite-plugin-pwa/pwa-entry-point-loaded';
+          }
+          return undefined;
+        },
+        load(id) {
+          if (hmrDisabled && id === '\0/@vite-plugin-pwa/pwa-entry-point-loaded') {
+            return `export default function registerDevSW() {
+  if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations?.().then((regs) => {
+      regs.forEach((reg) => {
+        const url = reg.active?.scriptURL || reg.installing?.scriptURL || reg.waiting?.scriptURL || '';
+        if (url.includes('dev-sw.js')) reg.unregister().catch(() => {});
+      });
+    }).catch(() => {});
+  }
+}`;
+          }
+          return undefined;
+        },
+      },
       react(),
       tailwindcss(),
       VitePWA({

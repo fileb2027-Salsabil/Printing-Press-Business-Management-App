@@ -5,6 +5,7 @@ import { formatCurrency, formatDate, formatNumber, toBanglaDigits } from '../../
 import { translations } from '../../utils/i18n';
 import { PrintHeader, PrintSignatures, PrintAmountInWords, triggerPrint } from '../common/PrintHeader';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 import {
   FileText,
   Plus,
@@ -957,12 +958,10 @@ export const BillingManager: React.FC = () => {
                                 বিলিং পরিমাণ ({unitLabel}):
                               </label>
                               <div className="relative">
-                                <input
-                                  type="number"
-                                  step="any"
-                                  min="0.01"
+                                <SmartNumberInput
+                                  min={0}
                                   value={item.quantity}
-                                  onChange={(e) => handleQtyChange(idx, parseFloat(e.target.value) || 0)}
+                                  onValueChange={(v) => handleQtyChange(idx, v)}
                                   className="w-full border rounded-lg p-1.5 text-center font-bold bg-white text-slate-900"
                                 />
                                 <span className="absolute right-2 top-1.5 text-[10px] text-slate-400 font-semibold pointer-events-none">
@@ -976,12 +975,10 @@ export const BillingManager: React.FC = () => {
                                 দর / রেট (৳ প্রতি {unitLabel}):
                               </label>
                               <div className="relative">
-                                <input
-                                  type="number"
-                                  step="any"
-                                  min="0"
+                                <SmartNumberInput
+                                  min={0}
                                   value={item.rate}
-                                  onChange={(e) => handleRateChange(idx, parseFloat(e.target.value) || 0)}
+                                  onValueChange={(v) => handleRateChange(idx, v)}
                                   className="w-full border rounded-lg p-1.5 text-center font-bold text-emerald-800 bg-white"
                                 />
                                 <span className="absolute right-2 top-1.5 text-[10px] text-slate-400 font-semibold pointer-events-none">
@@ -1009,28 +1006,28 @@ export const BillingManager: React.FC = () => {
                 <div className="space-y-3">
                   <div>
                     <label className="block text-slate-600 mb-1">ছাড় / Discount (৳):</label>
-                    <input
-                      type="number"
+                    <SmartNumberInput
+                      min={0}
                       value={discount}
-                      onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                      onValueChange={setDiscount}
                       className="w-full border rounded p-1.5"
                     />
                   </div>
                   <div>
                     <label className="block text-slate-600 mb-1">অতিরিক্ত চার্জ (৳):</label>
-                    <input
-                      type="number"
+                    <SmartNumberInput
+                      min={0}
                       value={extraCharges}
-                      onChange={(e) => setExtraCharges(parseFloat(e.target.value) || 0)}
+                      onValueChange={setExtraCharges}
                       className="w-full border rounded p-1.5"
                     />
                   </div>
                   <div>
                     <label className="block text-slate-600 mb-1">নগদ প্রাপ্ত টাকা (কালেকশন জমা):</label>
-                    <input
-                      type="number"
+                    <SmartNumberInput
+                      min={0}
                       value={paidAmount}
-                      onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)}
+                      onValueChange={setPaidAmount}
                       className="w-full border rounded p-1.5 font-bold text-emerald-700 bg-white"
                     />
                   </div>

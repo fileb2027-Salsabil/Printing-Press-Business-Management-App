@@ -5,6 +5,7 @@ import { formatCurrency, formatDate } from '../../utils/calculations';
 import { translations } from '../../utils/i18n';
 import { PrintHeader, PrintSignatures, PrintAmountInWords, triggerPrint } from '../common/PrintHeader';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 import {
   TrendingUp,
   TrendingDown,
@@ -477,12 +478,12 @@ export const IncomeExpenseManager: React.FC = () => {
             <form onSubmit={handleSave} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">টাকার পরিমাণ (৳) *</label>
-                <input
-                  type="number"
+                <SmartNumberInput
                   required
-                  min="1"
+                  min={0}
+                  fallbackOnBlur={0}
                   value={form.amount}
-                  onChange={(e) => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })}
+                  onValueChange={(val) => setForm({ ...form, amount: val })}
                   className={`w-full border rounded-lg p-2.5 text-base font-bold ${
                     modalType === 'income' ? 'text-emerald-800' : 'text-rose-700'
                   }`}

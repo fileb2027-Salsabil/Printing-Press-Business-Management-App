@@ -9,6 +9,7 @@ import {
 import { translations } from '../../utils/i18n';
 import { PrintHeader, PrintSignatures, PrintAmountInWords, triggerPrint } from '../common/PrintHeader';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 import {
   Boxes,
   Plus,
@@ -719,13 +720,13 @@ export const PuttiSalesManager: React.FC = () => {
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   অগ্রিম গ্রহণের পরিমাণ (৳) *
                 </label>
-                <input
-                  type="number"
+                <SmartNumberInput
                   required
-                  min="1"
+                  min={0}
+                  fallbackOnBlur={0}
                   value={advanceForm.amount}
-                  onChange={(e) =>
-                    setAdvanceForm({ ...advanceForm, amount: parseFloat(e.target.value) || 0 })
+                  onValueChange={(val) =>
+                    setAdvanceForm({ ...advanceForm, amount: val })
                   }
                   className="w-full border rounded-lg p-2.5 text-base font-black text-indigo-800"
                   placeholder="৳ 0.00"
@@ -886,23 +887,23 @@ export const PuttiSalesManager: React.FC = () => {
               <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">পরিমাণ (কেজি) *</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
                     required
-                    min="1"
+                    min={0}
+                    fallbackOnBlur={0}
                     value={form.quantityKg}
-                    onChange={(e) => setForm({ ...form, quantityKg: parseFloat(e.target.value) || 0 })}
+                    onValueChange={(val) => setForm({ ...form, quantityKg: val })}
                     className="w-full border rounded p-2 text-sm font-bold text-center"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">দর (৳ প্রতি কেজি) *</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
                     required
-                    min="1"
+                    min={0}
+                    fallbackOnBlur={0}
                     value={form.ratePerKg}
-                    onChange={(e) => setForm({ ...form, ratePerKg: parseFloat(e.target.value) || 0 })}
+                    onValueChange={(val) => setForm({ ...form, ratePerKg: val })}
                     className="w-full border rounded p-2 text-sm font-bold text-center"
                   />
                 </div>
@@ -1039,15 +1040,15 @@ export const PuttiSalesManager: React.FC = () => {
                         <label className="block text-[11px] text-slate-600 font-bold mb-1">
                           নগদ প্রাপ্ত টাকা (৳):
                         </label>
-                        <input
-                          type="number"
-                          min="0"
+                        <SmartNumberInput
+                          min={0}
                           max={remainingAfterAdvance}
+                          fallbackOnBlur={0}
                           value={form.cashAmount}
-                          onChange={(e) =>
+                          onValueChange={(val) =>
                             setForm({
                               ...form,
-                              cashAmount: parseFloat(e.target.value) || 0,
+                              cashAmount: val,
                             })
                           }
                           className="w-full border rounded p-1.5 text-xs font-bold text-emerald-800"

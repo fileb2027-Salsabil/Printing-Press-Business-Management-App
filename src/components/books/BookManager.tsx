@@ -3,6 +3,7 @@ import { useDatabase } from '../../context/DatabaseContext';
 import { Book } from '../../types';
 import { formatCurrency } from '../../utils/calculations';
 import { translations } from '../../utils/i18n';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 import {
   BookOpen,
   Plus,
@@ -538,21 +539,23 @@ export const BookManager: React.FC<BookManagerProps> = ({ onSelectParty }) => {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">ফর্মা সংখ্যা</label>
-                  <input
-                    type="number"
-                    min="1"
+                  <SmartNumberInput
+                    integer
+                    min={0}
+                    fallbackOnBlur={0}
                     value={form.forma}
-                    onChange={(e) => setForm({ ...form, forma: parseInt(e.target.value, 10) || 1 })}
+                    onValueChange={(val) => setForm({ ...form, forma: val })}
                     className="w-full border rounded-lg p-2 text-sm"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">প্লেট সংখ্যা</label>
-                  <input
-                    type="number"
-                    min="1"
+                  <SmartNumberInput
+                    integer
+                    min={0}
+                    fallbackOnBlur={0}
                     value={form.plates}
-                    onChange={(e) => setForm({ ...form, plates: parseInt(e.target.value, 10) || 4 })}
+                    onValueChange={(val) => setForm({ ...form, plates: val })}
                     className="w-full border rounded-lg p-2 text-sm"
                   />
                 </div>
@@ -596,10 +599,11 @@ export const BookManager: React.FC<BookManagerProps> = ({ onSelectParty }) => {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">ডিফল্ট রেট (৳)</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
+                    min={0}
+                    fallbackOnBlur={0}
                     value={form.defaultRate}
-                    onChange={(e) => setForm({ ...form, defaultRate: parseFloat(e.target.value) || 0 })}
+                    onValueChange={(val) => setForm({ ...form, defaultRate: val })}
                     className="w-full border rounded-lg p-2 text-sm"
                   />
                 </div>

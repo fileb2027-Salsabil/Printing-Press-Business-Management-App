@@ -10,6 +10,7 @@ import {
 } from '../../utils/calculations';
 import { translations } from '../../utils/i18n';
 import { PrintHeader, PrintSignatures, triggerPrint } from '../common/PrintHeader';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 import {
   CalendarCheck,
   Calendar,
@@ -66,6 +67,11 @@ export const DailyAttendance: React.FC = () => {
 
   const activeEmployees = sortEmployeesByDesignation(db.employees.filter((e) => e.isActive));
 
+  // Click behavior mode (supports 1-tap attendance toggle OR 1-tap OT/detail entry on mobile & PC)
+  const [cellClickMode, setCellClickMode] = useState<'toggle' | 'ot'>('toggle');
+  const longPressTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFiredRef = React.useRef<boolean>(false);
+
   // Modal for Bulk Overtime (সবার বা নির্বাচিতদের একবারে ওভারটাইম দেওয়া)
   const [isBulkOtModalOpen, setIsBulkOtModalOpen] = useState(false);
   const [bulkOtDate, setBulkOtDate] = useState(currentDateString);
@@ -80,7 +86,7 @@ export const DailyAttendance: React.FC = () => {
   const handleApplyBulkOt = (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return;
-    if (!bulkOtDate || bulkOtHours <= 0 || selectedOtEmpIds.length === 0) return;
+    if (!bulkOtDate || bulkOtHours < 0 || isNaN(bulkOtHours) || selectedOtEmpIds.length === 0) return;
 
     selectedOtEmpIds.forEach((empId) => {
       const emp = db.employees.find((e) => e.id === empId);
@@ -99,7 +105,7 @@ export const DailyAttendance: React.FC = () => {
       });
     });
 
-    setBulkOtSuccess(`সফলভাবে ${selectedOtEmpIds.length} জন কর্মচারীর ${formatDate(bulkOtDate, lang)} তারিখের জন্য ${bulkOtHours} ঘণ্টা ওভারটাইম যুক্ত হয়েছে!`);
+    setBulkOtSuccess(`সফলভাবে ${selectedOtEmpIds.length} জন কর্মচারীর ${formatDate(bulkOtDate, lang)} তারিখের জন্য ${bulkOtHours} ঘণ্টা ওভারটাইম সংরক্ষণ হয়েছে!`);
     setTimeout(() => {
       setBulkOtSuccess('');
       setIsBulkOtModalOpen(false);
@@ -233,6 +239,36 @@ export const DailyAttendance: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  const handleCellTouchStart = (employeeId: string, day: number) => {
+    if (isReadOnly) return;
+    longPressFiredRef.current = false;
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      longPressFiredRef.current = true;
+      handleOpenDetailModal(employeeId, day);
+    }, 420);
+  };
+
+  const handleCellTouchCancel = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleCellClick = (employeeId: string, day: number) => {
+    if (longPressFiredRef.current) {
+      longPressFiredRef.current = false;
+      return;
+    }
+    if (isReadOnly) return;
+    if (cellClickMode === 'ot') {
+      handleOpenDetailModal(employeeId, day);
+    } else {
+      handleToggleStatus(employeeId, day);
+    }
+  };
+
   const handleSaveModal = (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return;
@@ -358,13 +394,47 @@ export const DailyAttendance: React.FC = () => {
               ))}
             </select>
 
-            <input
-              type="number"
+            <SmartNumberInput
+              integer
+              min={2000}
+              max={2100}
+              fallbackOnBlur={now.getFullYear()}
               value={selectedYear}
-              onChange={(e) => setSelectedYear(parseInt(e.target.value, 10) || 2026)}
+              onValueChange={(val) => {
+                if (val >= 2000 && val <= 2100) setSelectedYear(val);
+              }}
               className="border rounded p-1.5 text-xs font-bold w-20 text-center"
             />
           </div>
+
+          {!isReadOnly && (
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1">
+              <button
+                type="button"
+                onClick={() => setCellClickMode('toggle')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 ${
+                  cellClickMode === 'toggle'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Check className="w-3 h-3" />
+                <span>হাজিরা টগল</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCellClickMode('ot')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 ${
+                  cellClickMode === 'ot'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Clock className="w-3 h-3" />
+                <span>ওভারটাইম (OT) এন্ট্রি</span>
+              </button>
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center gap-3 text-xs">
             <span className="flex items-center space-x-1">
@@ -520,7 +590,17 @@ export const DailyAttendance: React.FC = () => {
                           <td
                             key={d}
                             onDoubleClick={() => handleOpenDetailModal(emp.id, d)}
-                            onClick={() => handleToggleStatus(emp.id, d)}
+                            onClick={() => handleCellClick(emp.id, d)}
+                            onTouchStart={() => handleCellTouchStart(emp.id, d)}
+                            onTouchEnd={handleCellTouchCancel}
+                            onTouchMove={handleCellTouchCancel}
+                            onTouchCancel={handleCellTouchCancel}
+                            onContextMenu={(e) => {
+                              if (!isReadOnly) {
+                                e.preventDefault();
+                                handleOpenDetailModal(emp.id, d);
+                              }
+                            }}
                             className={`p-0.5 text-center border-r select-none transition ${isReadOnly ? 'cursor-default' : 'cursor-pointer'} ${
                               isPresent
                                 ? isFriday
@@ -609,8 +689,8 @@ export const DailyAttendance: React.FC = () => {
           </table>
         </div>
 
-        <div className="p-3 bg-slate-50 border-t text-[11px] text-slate-500 flex justify-between">
-          <span>* ঘরে ১-ক্লিক করলে উপস্থিত/অনুপস্থিত টগল হবে। ডাবল-ক্লিক করলে সময় ও OT এডিট করা যাবে।</span>
+        <div className="p-3 bg-slate-50 border-t text-[11px] text-slate-500 flex flex-wrap justify-between gap-2">
+          <span>* ঘরে ১-ক্লিক করলে উপস্থিত/অনুপস্থিত টগল হবে। ডাবল-ক্লিক, মোবাইলে চেপে ধরে অথবা উপরের "ওভারটাইম (OT) এন্ট্রি" মোডে ১-ট্যাপ করে সময় ও OT দিন।</span>
           <span>হাজিরা বোনাস ২৩ দিন বা পূর্ণ মাসের উপস্থিতিতে স্বয়ংক্রিয় গণনা হবে।</span>
         </div>
 
@@ -666,15 +746,70 @@ export const DailyAttendance: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">ওভারটাইম ঘণ্টা (OT Hours)</label>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  value={modalForm.otHours}
-                  onChange={(e) => setModalForm({ ...modalForm, otHours: parseFloat(e.target.value) || 0 })}
-                  className="w-full border rounded-lg p-2 text-xs font-bold text-amber-800"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">ওভারটাইম ঘণ্টা (OT Hours)</label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setModalForm((prev) => ({
+                        ...prev,
+                        otHours: calculateOtHoursFromShift(prev.checkOutTime, prev.checkInTime),
+                      }))
+                    }
+                    className="text-[10px] font-bold text-emerald-700 hover:underline"
+                  >
+                    সময় থেকে হিসাব করুন
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setModalForm((prev) => ({
+                        ...prev,
+                        otHours: Math.max(0, Math.round((prev.otHours - 0.5) * 10) / 10),
+                      }))
+                    }
+                    className="px-2.5 py-2 border rounded-lg text-xs font-black bg-slate-100 hover:bg-slate-200 text-slate-700"
+                  >
+                    −
+                  </button>
+                  <SmartNumberInput
+                    min={0}
+                    fallbackOnBlur={0}
+                    value={modalForm.otHours}
+                    onValueChange={(val) => setModalForm((prev) => ({ ...prev, otHours: val }))}
+                    className="flex-1 border rounded-lg p-2 text-xs font-bold text-amber-800 text-center"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setModalForm((prev) => ({
+                        ...prev,
+                        otHours: Math.round((prev.otHours + 0.5) * 10) / 10,
+                      }))
+                    }
+                    className="px-2.5 py-2 border rounded-lg text-xs font-black bg-amber-100 hover:bg-amber-200 text-amber-900"
+                  >
+                    +
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {[0, 1, 2, 3, 4, 5, 6].map((h) => (
+                    <button
+                      type="button"
+                      key={h}
+                      onClick={() => setModalForm((prev) => ({ ...prev, otHours: h }))}
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold border transition ${
+                        modalForm.otHours === h
+                          ? 'bg-amber-600 text-white border-amber-600'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-amber-50'
+                      }`}
+                    >
+                      {h}h
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div>
@@ -857,19 +992,18 @@ export const DailyAttendance: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">ওভারটাইম ঘণ্টা (OT Hours) *</label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0.5"
+                  <SmartNumberInput
+                    min={0}
+                    fallbackOnBlur={0}
                     required
                     value={bulkOtHours}
-                    onChange={(e) => setBulkOtHours(parseFloat(e.target.value) || 0)}
+                    onValueChange={setBulkOtHours}
                     className="w-full border rounded-lg p-2 text-xs font-black text-amber-700 bg-white"
                   />
                 </div>
                 <div className="col-span-2 flex flex-wrap gap-1.5 pt-1 border-t">
                   <span className="text-[11px] text-slate-500 font-semibold self-center mr-1">দ্রুত ঘণ্টা নির্বাচন:</span>
-                  {[1, 2, 3, 4, 5, 6].map((h) => (
+                  {[0, 1, 2, 3, 4, 5, 6].map((h) => (
                     <button
                       type="button"
                       key={h}

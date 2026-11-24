@@ -4,6 +4,7 @@ import { InkOrderSlip, InkOrderSlipItem, PurchaseUnit } from '../../types';
 import { formatCurrency, formatDate, formatNumber } from '../../utils/calculations';
 import { PrintHeader, triggerPrint } from '../common/PrintHeader';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 import {
   Droplet,
   Plus,
@@ -1146,12 +1147,10 @@ export const InkOrderSlipManager: React.FC = () => {
                 {/* Quantity */}
                 <div className="lg:col-span-2">
                   <label className="block text-xs font-bold text-slate-700 mb-1">পরিমাণ *</label>
-                  <input
-                    type="number"
-                    min={0.1}
-                    step="any"
+                  <SmartNumberInput
+                    min={0}
                     value={itemQuantity}
-                    onChange={(e) => setItemQuantity(parseFloat(e.target.value) || 0)}
+                    onValueChange={setItemQuantity}
                     className="w-full border border-indigo-300 rounded-xl px-2.5 py-2 text-xs font-black text-center bg-white"
                   />
                 </div>
@@ -1177,12 +1176,11 @@ export const InkOrderSlipManager: React.FC = () => {
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     দর (৳) <span className="text-[10px] font-normal text-slate-500">(ঐচ্ছিক)</span>
                   </label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
                     min={0}
-                    step="any"
+                    clearableToEmpty
                     value={itemUnitPrice}
-                    onChange={(e) => setItemUnitPrice(e.target.value)}
+                    onTextValueChange={setItemUnitPrice}
                     placeholder="পরে বসানো যাবে"
                     className="w-full border border-slate-300 rounded-xl px-2.5 py-2 text-xs font-bold text-center bg-white"
                   />
@@ -1260,27 +1258,24 @@ export const InkOrderSlipManager: React.FC = () => {
                             )}
                           </td>
                           <td className="p-2.5 text-center">
-                            <input
-                              type="number"
-                              min={0.1}
-                              step="any"
+                            <SmartNumberInput
+                              min={0}
                               value={it.quantity}
-                              onChange={(e) =>
-                                handleUpdateSlipItemField(it.id, 'quantity', e.target.value)
+                              onTextValueChange={(val) =>
+                                handleUpdateSlipItemField(it.id, 'quantity', val)
                               }
                               className="w-20 border border-indigo-300 rounded-lg px-2 py-1 text-xs font-black text-center"
                             />
                           </td>
                           <td className="p-2.5 font-bold text-slate-700">{it.unit}</td>
                           <td className="p-2.5 text-center">
-                            <input
-                              type="number"
+                            <SmartNumberInput
                               min={0}
-                              step="any"
+                              clearableToEmpty
                               value={it.unitPrice ?? ''}
                               placeholder="পরে"
-                              onChange={(e) =>
-                                handleUpdateSlipItemField(it.id, 'unitPrice', e.target.value)
+                              onTextValueChange={(val) =>
+                                handleUpdateSlipItemField(it.id, 'unitPrice', val)
                               }
                               className="w-24 border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-center"
                             />
@@ -1599,15 +1594,14 @@ export const InkOrderSlipManager: React.FC = () => {
                             {formatNumber(it.quantity, lang, numFmt)} {it.unit}
                           </td>
                           <td className="p-2.5 text-center">
-                            <input
-                              type="number"
+                            <SmartNumberInput
                               min={0}
-                              step="any"
+                              clearableToEmpty
                               value={pricingValues[it.id] ?? ''}
-                              onChange={(e) =>
+                              onTextValueChange={(val) =>
                                 setPricingValues((prev) => ({
                                   ...prev,
-                                  [it.id]: e.target.value,
+                                  [it.id]: val,
                                 }))
                               }
                               placeholder="দর লিখুন"
@@ -1672,11 +1666,11 @@ export const InkOrderSlipManager: React.FC = () => {
                           <label className="block text-[11px] font-bold text-slate-600 mb-1">
                             নগদ প্রদান (৳)
                           </label>
-                          <input
-                            type="number"
+                          <SmartNumberInput
                             min={0}
+                            clearableToEmpty
                             value={paidAmount}
-                            onChange={(e) => setPaidAmount(e.target.value)}
+                            onTextValueChange={setPaidAmount}
                             className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold bg-white"
                           />
                         </div>

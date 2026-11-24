@@ -3,6 +3,7 @@ import { useDatabase } from '../../context/DatabaseContext';
 import { CompanySettings, BanglaFont, Theme, Language } from '../../types';
 import { validateAndProcessImage } from '../../utils/imageUpload';
 import { Building2, User, Shield, Palette, CheckCircle2, Upload, Trash2, ArrowRight } from 'lucide-react';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 
 export const SetupWizard: React.FC = () => {
   const { db, updateSettings } = useDatabase();
@@ -352,10 +353,10 @@ export const SetupWizard: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">প্রাথমিক নগদ / ব্যাংক ব্যালেন্স (৳)</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
+                    allowNegative
                     value={form.openingBalance}
-                    onChange={(e) => setForm({ ...form, openingBalance: parseFloat(e.target.value) || 0 })}
+                    onValueChange={(v) => setForm({ ...form, openingBalance: v })}
                     className="w-full border rounded-lg p-2.5 text-sm"
                   />
                   <p className="text-[11px] text-slate-500 mt-1">এটি Opening Balance হিসেবে গণ্য হবে, কালেকশনের সাথে মিলবে না।</p>
@@ -407,17 +408,19 @@ export const SetupWizard: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-50 rounded-xl">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">প্রতি রিমে শিট সংখ্যা</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
+                    integer
+                    min={1}
+                    fallbackOnBlur={500}
                     value={form.sheetsPerReam}
-                    onChange={(e) => setForm({ ...form, sheetsPerReam: parseInt(e.target.value, 10) || 500 })}
+                    onValueChange={(v) => setForm({ ...form, sheetsPerReam: Math.max(1, v) })}
                     className="w-full border rounded p-2 text-sm bg-white"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">ওভারটাইম হার (%)</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
+                    integer
                     value={form.defaultOtRatePercent}
                     disabled
                     className="w-full border rounded p-2 text-sm bg-slate-100 text-slate-500 cursor-not-allowed"
@@ -426,10 +429,12 @@ export const SetupWizard: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">মাসিক স্বাভাবিক কর্মঘণ্টা (H)</label>
-                  <input
-                    type="number"
+                  <SmartNumberInput
+                    integer
+                    min={1}
+                    fallbackOnBlur={208}
                     value={form.standardMonthlyWorkHours}
-                    onChange={(e) => setForm({ ...form, standardMonthlyWorkHours: parseInt(e.target.value, 10) || 208 })}
+                    onValueChange={(v) => setForm({ ...form, standardMonthlyWorkHours: Math.max(1, v) })}
                     className="w-full border rounded p-2 text-sm bg-white"
                   />
                   <span className="text-[10px] text-slate-500">ডিফল্ট ২০৮ ঘণ্টা (২৬ দিন × ৮ ঘণ্টা)</span>

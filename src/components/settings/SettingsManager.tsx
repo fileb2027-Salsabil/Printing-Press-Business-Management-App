@@ -3,6 +3,7 @@ import { useDatabase } from '../../context/DatabaseContext';
 import { BanglaFont, CompanySettings, Language, Theme } from '../../types';
 import { validateAndProcessImage } from '../../utils/imageUpload';
 import { translations } from '../../utils/i18n';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 import {
   Settings,
   Building2,
@@ -346,18 +347,20 @@ export const SettingsManager: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">প্রতি রিমে শিট সংখ্যা</label>
-              <input
-                type="number"
+              <SmartNumberInput
+                integer
+                min={1}
+                fallbackOnBlur={500}
                 value={form.sheetsPerReam}
-                onChange={(e) => setForm({ ...form, sheetsPerReam: parseInt(e.target.value, 10) || 500 })}
+                onValueChange={(v) => setForm({ ...form, sheetsPerReam: Math.max(1, v) })}
                 className="w-full border rounded p-2 text-xs"
               />
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">ওভারটাইম হার (%)</label>
-              <input
-                type="number"
+              <SmartNumberInput
+                integer
                 value={form.defaultOtRatePercent}
                 disabled
                 className="w-full border rounded p-2 text-xs bg-slate-100 text-slate-500"
@@ -366,10 +369,12 @@ export const SettingsManager: React.FC = () => {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">মাসিক স্বাভাবিক কর্মঘণ্টা (H)</label>
-              <input
-                type="number"
+              <SmartNumberInput
+                integer
+                min={1}
+                fallbackOnBlur={208}
                 value={form.standardMonthlyWorkHours}
-                onChange={(e) => setForm({ ...form, standardMonthlyWorkHours: parseInt(e.target.value, 10) || 208 })}
+                onValueChange={(v) => setForm({ ...form, standardMonthlyWorkHours: Math.max(1, v) })}
                 className="w-full border rounded p-2 text-xs"
               />
             </div>

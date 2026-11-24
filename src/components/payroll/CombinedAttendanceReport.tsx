@@ -10,6 +10,7 @@ import {
 } from '../../utils/calculations';
 import { translations } from '../../utils/i18n';
 import { PrintHeader, PrintSignatures, triggerPrint } from '../common/PrintHeader';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 import {
   Layers,
   Calendar,
@@ -194,10 +195,15 @@ export const CombinedAttendanceReport: React.FC = () => {
             ))}
           </select>
 
-          <input
-            type="number"
+          <SmartNumberInput
+            integer
+            min={2000}
+            max={2100}
+            fallbackOnBlur={new Date().getFullYear()}
             value={selectedYear}
-            onChange={(e) => setSelectedYear(parseInt(e.target.value, 10) || 2026)}
+            onValueChange={(val) => {
+              if (val >= 2000 && val <= 2100) setSelectedYear(val);
+            }}
             className="border rounded p-1.5 text-xs font-bold w-20 text-center"
           />
         </div>

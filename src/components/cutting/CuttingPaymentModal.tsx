@@ -3,6 +3,7 @@ import { useDatabase } from '../../context/DatabaseContext';
 import { CuttingWorker } from '../../types';
 import { formatCurrency } from '../../utils/calculations';
 import { Wallet, X, Check, Calendar, CreditCard, FileText } from 'lucide-react';
+import { SmartNumberInput } from '../common/SmartNumberInput';
 
 interface CuttingPaymentModalProps {
   isOpen: boolean;
@@ -126,14 +127,15 @@ export const CuttingPaymentModal: React.FC<CuttingPaymentModalProps> = ({
               <Wallet className="w-3.5 h-3.5 text-emerald-600" />
               <span>প্রদত্ত টাকার পরিমাণ (৳) *</span>
             </label>
-            <input
-              type="number"
+            <SmartNumberInput
               required
-              min="1"
-              step="any"
+              min={0}
+              clearableToEmpty
               placeholder="টাকার পরিমাণ লিখুন"
               value={amount}
-              onChange={(e) => setAmount(e.target.value === '' ? '' : parseFloat(e.target.value))}
+              onTextValueChange={(s) =>
+                setAmount(s === '' ? '' : Number.isFinite(parseFloat(s)) ? parseFloat(s) : '')
+              }
               className="w-full border-2 border-emerald-500/40 rounded-lg p-2.5 text-base font-black text-slate-900 focus:outline-emerald-600"
             />
           </div>

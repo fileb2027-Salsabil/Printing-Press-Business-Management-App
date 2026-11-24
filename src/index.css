@@ -10,6 +10,8 @@
 
   /* Clear, distinct, legible numbers in both Bengali and English digits */
   input[type="number"],
+  input[inputmode="decimal"],
+  input[inputmode="numeric"],
   .tabular-nums,
   table td,
   table th,
@@ -47,7 +49,7 @@
 
 /* Print specific styles - Optimized for single-page printing */
 @media print {
-  html, body, #root, main, .overflow-y-auto, .overflow-hidden, .flex-1 {
+  html, body, #root, main, .overflow-y-auto, .overflow-hidden, .flex-1, .h-dvh {
     overflow: visible !important;
     height: auto !important;
     min-height: auto !important;

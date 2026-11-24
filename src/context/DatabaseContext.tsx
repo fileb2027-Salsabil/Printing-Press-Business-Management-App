@@ -276,6 +276,7 @@ interface DatabaseContextType {
   currentUser: User | null;
   authResolved: boolean;
   isCloudHydrating: boolean;
+  hasVerifiedEmptyCloudDoc: boolean;
   loginWithGoogle: (businessReg?: {
     registerNewBusiness?: boolean;
     businessName?: string;
@@ -469,6 +470,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [authResolved, setAuthResolved] = useState(false);
   const [isRegistrySyncing, setIsRegistrySyncing] = useState(false);
   const [isCloudDataSyncing, setIsCloudDataSyncing] = useState(false);
+  const [hasVerifiedEmptyCloudDoc, setHasVerifiedEmptyCloudDoc] = useState(false);
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(() => isCloudQuotaExhausted());
   const [cloudSyncStatus, setCloudSyncStatus] = useState<
     'synced' | 'syncing' | 'offline' | 'unauthenticated' | 'quota_exceeded'
@@ -531,6 +533,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     let cancelled = false;
     hasLoadedCloudOnce.current = false;
     isRemoteCloudUpdate.current = false;
+    setHasVerifiedEmptyCloudDoc(false);
 
     async function initDB() {
       if (!currentUser) {
@@ -893,7 +896,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         hasLoadedCloudOnce.current = true;
         setIsCloudDataSyncing(false);
       }
-    }, 4000);
+    }, 9000);
 
     const unsubscribe = onSnapshot(
       docRef,
@@ -902,6 +905,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (snapshot.metadata.hasPendingWrites) return;
 
         if (snapshot.exists()) {
+          setHasVerifiedEmptyCloudDoc(false);
           const cloudManifest = snapshot.data();
           if (cloudManifest) {
             if (cloudManifest.updatedAt && isLastPushedTimestamp(cloudManifest.updatedAt, bizId)) {
@@ -941,6 +945,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }
           }
         } else if (!snapshot.metadata.fromCache) {
+          setHasVerifiedEmptyCloudDoc(true);
           hasLoadedCloudOnce.current = true;
           setIsCloudDataSyncing(false);
           if (
@@ -965,6 +970,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       },
       (error) => {
         if (isCancelled) return;
+        setHasVerifiedEmptyCloudDoc(false);
         hasLoadedCloudOnce.current = true;
         setIsCloudDataSyncing(false);
         if (isQuotaExhaustedError(error)) {
@@ -3288,7 +3294,12 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           regStaffMatch &&
           (regStaffMatch.status !== list[index].status ||
             regStaffMatch.role !== list[index].role ||
-            regStaffMatch.uid !== list[index].uid)
+            regStaffMatch.uid !== list[index].uid ||
+            !!regStaffMatch.isReadOnly !== !!list[index].isReadOnly ||
+            regStaffMatch.displayName !== list[index].displayName ||
+            regStaffMatch.loginUsername !== list[index].loginUsername ||
+            JSON.stringify(regStaffMatch.permissions || {}) !==
+              JSON.stringify(list[index].permissions || {}))
         ) {
           const updated = [...list];
           updated[index] = {
@@ -4457,6 +4468,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return { success: false, error: 'ভুল অ্যাডমিন পিন (Invalid Admin PIN)' };
       }
     }
+    setHasVerifiedEmptyCloudDoc(true);
     setDb((prev) => {
       const updated = {
         ...prev,
@@ -4846,6 +4858,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           // ignore
         }
         setUnlockedBusinessIds([existingTarget.id]);
+        if (existingTarget.id !== activeBusinessId) {
+          setIsReady(false);
+        }
         setActiveBusinessId(existingTarget.id);
         return;
       }
@@ -5722,6 +5737,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       loadedBusinessIdRef.current = null;
       hasLoadedCloudOnce.current = false;
       isRemoteCloudUpdate.current = false;
+      setHasVerifiedEmptyCloudDoc(false);
       clearCloudSyncSessionCache();
       setIsReady(false);
       await signOut(auth);
@@ -6073,6 +6089,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             needsAutoRoute ||
             loadedBusinessIdRef.current !== activeBusinessId)
       ),
+      hasVerifiedEmptyCloudDoc,
       loginWithGoogle,
       loginWithEmailOrUsername,
       signupWithEmailOrUsername,
@@ -6144,6 +6161,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       authResolved,
       isRegistrySyncing,
       isCloudDataSyncing,
+      hasVerifiedEmptyCloudDoc,
       needsAutoRoute,
       cloudSyncStatus,
       isQuotaExceeded,

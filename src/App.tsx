@@ -256,6 +256,8 @@ const AppContent: React.FC = () => {
     isReady,
     authResolved,
     isCloudHydrating,
+    hasVerifiedEmptyCloudDoc,
+    cloudSyncStatus,
     updateSettings,
     currentUser,
     currentUserAccess,
@@ -354,11 +356,19 @@ const AppContent: React.FC = () => {
   const isRegisteredNonDefaultShop = Boolean(
     currentBusiness && currentBusiness.id !== DEFAULT_BUSINESS_ID
   );
+  const hasRegisteredStaff =
+    (db.userAccessList?.length || 0) > 0 ||
+    (saasRegistry.staffAccounts || []).some(
+      (s) => (s.businessId || DEFAULT_BUSINESS_ID) === DEFAULT_BUSINESS_ID
+    );
 
-  // Auto-heal settings.isConfigured when a registered shop or saved records already exist
+  // Auto-heal settings.isConfigured when a registered shop, saved records, staff, or non-main-admin logs in
   useEffect(() => {
     if (!isReady || !authResolved || !currentUser || isCloudHydrating) return;
-    if (!db.settings.isConfigured && (isRegisteredNonDefaultShop || hasExistingRecords)) {
+    if (
+      !db.settings.isConfigured &&
+      (isRegisteredNonDefaultShop || hasExistingRecords || hasRegisteredStaff || !isMainAdmin)
+    ) {
       updateSettings({
         isConfigured: true,
         ...(isRegisteredNonDefaultShop && currentBusiness?.name && !db.settings.name
@@ -375,6 +385,8 @@ const AppContent: React.FC = () => {
     db.settings.name,
     isRegisteredNonDefaultShop,
     hasExistingRecords,
+    hasRegisteredStaff,
+    isMainAdmin,
     currentBusiness?.name,
     currentBusiness?.nameEn,
     updateSettings,
@@ -454,12 +466,16 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // First run Setup Wizard (only for initial unconfigured flagship press when no records exist)
+  // First run Setup Wizard (strictly ONLY for brand-new flagship initialization by main admin when cloud confirms empty DB)
   if (
+    isMainAdmin &&
     !db.settings.isConfigured &&
     !isRegisteredNonDefaultShop &&
     !hasExistingRecords &&
-    (isMainAdmin || currentUserAccess?.status === 'approved')
+    !hasRegisteredStaff &&
+    hasVerifiedEmptyCloudDoc &&
+    cloudSyncStatus !== 'offline' &&
+    cloudSyncStatus !== 'quota_exceeded'
   ) {
     return <SetupWizard />;
   }
@@ -544,7 +560,7 @@ const AppContent: React.FC = () => {
     !isAdminTab && activeModuleKey ? isModuleLockedBySubscription(activeModuleKey) : false;
 
   return (
-    <div className={`min-h-screen flex flex-col bg-slate-50 text-slate-900 ${fontClass}`}>
+    <div className={`h-dvh overflow-hidden flex flex-col bg-slate-50 text-slate-900 ${fontClass}`}>
       {/* Top Navigation */}
       <Navbar
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -618,7 +634,7 @@ const AppContent: React.FC = () => {
       )}
 
       {/* Main Body */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Sidebar */}
         <Sidebar
           activeTab={activeTab}
@@ -631,7 +647,7 @@ const AppContent: React.FC = () => {
         />
 
         {/* Content Area */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto">
             {/* If tab is subscription paywall & checkout */}
             {activeTab === 'subscription' ? (
