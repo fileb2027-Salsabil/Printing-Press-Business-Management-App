@@ -9,6 +9,8 @@ import {
   createUserWithEmailAndPassword,
   updateProfile,
   updatePassword,
+  EmailAuthProvider,
+  linkWithCredential,
   signOut,
   onAuthStateChanged,
   User,
@@ -68,6 +70,8 @@ export {
   createUserWithEmailAndPassword,
   updateProfile,
   updatePassword,
+  EmailAuthProvider,
+  linkWithCredential,
   signOut,
   onAuthStateChanged,
 };

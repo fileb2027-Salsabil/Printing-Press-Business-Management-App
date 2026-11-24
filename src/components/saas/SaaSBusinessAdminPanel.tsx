@@ -76,6 +76,8 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
     adminUpdatePartyAccount,
     deletePartyAccount,
     provisionStaffUser,
+    setMyLoginPassword,
+    currentUser,
   } = useDatabase();
 
   const [subTab, setSubTab] = useState<'businesses' | 'packages' | 'party-accounts'>('businesses');
@@ -127,6 +129,14 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
   const [platformForm, setPlatformForm] = useState<SaaSPlatformSettings>(saasRegistry.platformSettings);
   const [savedNotice, setSavedNotice] = useState('');
   const [reviewingReqId, setReviewingReqId] = useState<string | null>(null);
+
+  // Super Admin Own Password Modal State
+  const [isMyPwdModalOpen, setIsMyPwdModalOpen] = useState(false);
+  const [myNewPwd, setMyNewPwd] = useState('');
+  const [myConfirmPwd, setMyConfirmPwd] = useState('');
+  const [showMyPwd, setShowMyPwd] = useState(false);
+  const [myPwdError, setMyPwdError] = useState('');
+  const [savingMyPwd, setSavingMyPwd] = useState(false);
 
   // Super Admin Staff User Provisioning Modal State
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
@@ -583,6 +593,21 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setMyNewPwd('');
+                setMyConfirmPwd('');
+                setMyPwdError('');
+                setShowMyPwd(false);
+                setIsMyPwdModalOpen(true);
+              }}
+              className="px-3.5 py-2 bg-amber-400/20 hover:bg-amber-400/30 text-amber-200 border border-amber-400/40 font-bold text-xs rounded-xl flex items-center space-x-1.5 shadow-md transition"
+              title="আপনার মেইন সুপার অ্যাডমিন ইমেইলের পাসওয়ার্ড সেট বা পরিবর্তন করুন"
+            >
+              <KeyRound className="w-4 h-4" />
+              <span>সুপার অ্যাডমিন পাসওয়ার্ড</span>
+            </button>
             <button
               type="button"
               onClick={() => openStaffProvisionModal()}
@@ -2208,6 +2233,133 @@ export const SaaSBusinessAdminPanel: React.FC<SaaSBusinessAdminPanelProps> = ({ 
                 >
                   <Save className="w-4 h-4" />
                   <span>{savingStaff ? 'তৈরি হচ্ছে...' : 'ইউজার ও পাসওয়ার্ড সেট করুন'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Super Admin Own Login Password Setup */}
+      {isMyPwdModalOpen && (
+        <div className="no-print fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-2">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    সুপার অ্যাডমিন পাসওয়ার্ড সেট / পরিবর্তন
+                  </h3>
+                  <p className="text-xs text-slate-500 font-mono">
+                    {currentUser?.email || 'fileb2027@gmail.com'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMyPwdModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {myPwdError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
+                {myPwdError}
+              </div>
+            )}
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setMyPwdError('');
+                if (myNewPwd.trim().length < 6) {
+                  setMyPwdError('পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।');
+                  return;
+                }
+                if (myNewPwd !== myConfirmPwd) {
+                  setMyPwdError('দুইটি পাসওয়ার্ড মেলেনি!');
+                  return;
+                }
+                setSavingMyPwd(true);
+                try {
+                  const res = await setMyLoginPassword(myNewPwd.trim());
+                  if (!res.success) {
+                    setMyPwdError(res.error || 'পাসওয়ার্ড সেট করা যায়নি।');
+                    return;
+                  }
+                  setIsMyPwdModalOpen(false);
+                  setSavedNotice(
+                    `${currentUser?.email || 'fileb2027@gmail.com'}-এর লগইন পাসওয়ার্ড সফলভাবে সেট হয়েছে! এখন থেকে ইমেইল ও এই পাসওয়ার্ড দিয়েও লগইন করতে পারবেন।`
+                  );
+                  setTimeout(() => setSavedNotice(''), 7000);
+                } finally {
+                  setSavingMyPwd(false);
+                }
+              }}
+              className="space-y-3 text-xs"
+            >
+              <p className="text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200 leading-relaxed">
+                Google দিয়ে লগইন করা অবস্থায় এখান থেকে আপনার ইমেইলের জন্য পাসওয়ার্ড সেট করলে পরবর্তীতে <strong>Vercel / মোবাইল / পিসি</strong> যেকোনো জায়গা থেকে ইমেইল ও পাসওয়ার্ড দিয়ে সরাসরি লগইন করতে পারবেন।
+              </p>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  নতুন পাসওয়ার্ড * (কমপক্ষে ৬ অক্ষর)
+                </label>
+                <div className="relative">
+                  <input
+                    type={showMyPwd ? 'text' : 'password'}
+                    required
+                    minLength={6}
+                    value={myNewPwd}
+                    onChange={(e) => setMyNewPwd(e.target.value)}
+                    placeholder="আপনার পছন্দের পাসওয়ার্ড লিখুন"
+                    className="w-full pl-3 pr-9 py-2 border border-slate-300 rounded-xl font-bold focus:outline-indigo-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowMyPwd(!showMyPwd)}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                  >
+                    {showMyPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  পাসওয়ার্ড নিশ্চিত করুন *
+                </label>
+                <input
+                  type={showMyPwd ? 'text' : 'password'}
+                  required
+                  minLength={6}
+                  value={myConfirmPwd}
+                  onChange={(e) => setMyConfirmPwd(e.target.value)}
+                  placeholder="আবার পাসওয়ার্ড লিখুন"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold focus:outline-indigo-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsMyPwdModalOpen(false)}
+                  className="px-4 py-2 border border-slate-300 rounded-xl font-bold text-slate-700"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingMyPwd}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl font-bold"
+                >
+                  {savingMyPwd ? 'সেট হচ্ছে...' : 'পাসওয়ার্ড সংরক্ষণ করুন'}
                 </button>
               </div>
             </form>

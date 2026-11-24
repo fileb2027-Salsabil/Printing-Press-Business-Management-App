@@ -11,6 +11,8 @@ import {
   createUserWithEmailAndPassword,
   updateProfile,
   updatePassword,
+  EmailAuthProvider,
+  linkWithCredential,
   signOut,
   onAuthStateChanged,
   User,
@@ -342,6 +344,7 @@ interface DatabaseContextType {
     existingUid?: string;
     oldAssignedPassword?: string;
   }) => Promise<{ success: boolean; userAccess?: AppUserAccess; error?: string }>;
+  setMyLoginPassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
   // Multi-Business & SaaS Subscription Management
   activeBusinessId: string;
   saasRegistry: SaaSRegistryState;
@@ -4795,9 +4798,18 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return { success: true, user: res.user };
     } catch (err: any) {
       console.warn('Email/Password Login error', err);
+      const email = normalizeIdentifierToEmail(identifier);
       let errorMsg = 'লগইন ব্যর্থ হয়েছে। ইউজারনেম/ইমেইল ও পাসওয়ার্ড সঠিক কিনা পরীক্ষা করুন।';
-      if (err?.code === 'auth/user-not-found' || err?.code === 'auth/invalid-credential') {
-        errorMsg = 'ভুল ইউজারনেম/ইমেইল অথবা ভুল পাসওয়ার্ড!';
+      if (err?.code === 'auth/operation-not-allowed') {
+        errorMsg =
+          'Firebase Console-এ Email/Password লগইন চালু করা নেই। Default Gemini Project (gen-lang-client-0081240772) > Authentication > Sign-in method থেকে Email/Password চালু করুন।';
+      } else if (err?.code === 'auth/user-not-found' || err?.code === 'auth/invalid-credential') {
+        if (email === MAIN_SUPER_ADMIN_EMAIL.toLowerCase()) {
+          errorMsg =
+            'এই সুপার অ্যাডমিন ইমেইলে এখনো পাসওয়ার্ড সেট করা হয়নি অথবা পাসওয়ার্ড মেলেনি। "Google দিয়ে ১-ক্লিকে চালিয়ে যান" বাটনে লগইন করে সুপার অ্যাডমিন প্যানেল থেকে অথবা Firebase Console (Default Gemini Project > Authentication > Users) থেকে পাসওয়ার্ড সেট করুন।';
+        } else {
+          errorMsg = 'ভুল ইউজারনেম/ইমেইল অথবা ভুল পাসওয়ার্ড!';
+        }
       } else if (err?.code === 'auth/wrong-password') {
         errorMsg = 'ভুল পাসওয়ার্ড!';
       } else if (err?.code === 'auth/invalid-email') {
@@ -4806,6 +4818,63 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         errorMsg = err.message;
       }
       return { success: false, error: errorMsg };
+    }
+  };
+
+  const setMyLoginPassword = async (
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    const user = auth.currentUser;
+    if (!user || !user.email) {
+      return { success: false, error: 'প্রথমে আপনার অ্যাকাউন্টে লগইন করুন।' };
+    }
+    const cleanPwd = (newPassword || '').trim();
+    if (cleanPwd.length < 6) {
+      return { success: false, error: 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।' };
+    }
+    const hasPasswordProvider = (user.providerData || []).some(
+      (p) => p.providerId === 'password'
+    );
+    try {
+      if (hasPasswordProvider) {
+        await updatePassword(user, cleanPwd);
+      } else {
+        const cred = EmailAuthProvider.credential(user.email, cleanPwd);
+        await linkWithCredential(user, cred);
+      }
+      return { success: true };
+    } catch (err: any) {
+      const code = err?.code || '';
+      if (code === 'auth/provider-already-linked' || code === 'auth/email-already-in-use') {
+        try {
+          await updatePassword(user, cleanPwd);
+          return { success: true };
+        } catch (uErr: any) {
+          if (uErr?.code === 'auth/requires-recent-login') {
+            return {
+              success: false,
+              error:
+                'নিরাপত্তার জন্য একবার লগআউট করে পুনরায় Google দিয়ে লগইন করুন এবং সাথে সাথে পাসওয়ার্ড সেট করুন।',
+            };
+          }
+          return { success: false, error: uErr?.message || 'পাসওয়ার্ড আপডেট করা যায়নি।' };
+        }
+      }
+      if (code === 'auth/requires-recent-login') {
+        return {
+          success: false,
+          error:
+            'নিরাপত্তার জন্য একবার লগআউট করে পুনরায় Google দিয়ে লগইন করুন এবং সাথে সাথে পাসওয়ার্ড সেট করুন।',
+        };
+      }
+      if (code === 'auth/operation-not-allowed') {
+        return {
+          success: false,
+          error:
+            'Firebase Console > Default Gemini Project (gen-lang-client-0081240772) > Authentication > Sign-in method থেকে Email/Password চালু করুন।',
+        };
+      }
+      return { success: false, error: err?.message || 'পাসওয়ার্ড সেট করা যায়নি।' };
     }
   };
 
@@ -5795,6 +5864,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       updateUserAccess,
       deleteUserAccess,
       provisionStaffUser,
+      setMyLoginPassword,
       activeBusinessId,
       saasRegistry,
       currentBusiness,
