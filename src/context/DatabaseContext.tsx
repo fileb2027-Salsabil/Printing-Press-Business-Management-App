@@ -428,6 +428,31 @@ interface DatabaseContextType {
 
 const DatabaseContext = createContext<DatabaseContextType | null>(null);
 
+function normalizePartyLoginId(loginId: string): string {
+  return (loginId || '').trim().toLowerCase().replace(/[^a-z0-9_.-@]/g, '');
+}
+
+function normalizePartyLoginEmail(loginId: string): string {
+  const clean = normalizePartyLoginId(loginId);
+  if (!clean) return 'party@party.makkahprinters.local';
+  if (clean.includes('@')) return clean;
+  return `${clean}@party.makkahprinters.local`;
+}
+
+function toFirebasePartyPassword(rawPwd: string): string {
+  const p = (rawPwd || '').trim();
+  return p.length >= 6 ? p : `${p}__ptl`;
+}
+
+function normalizeIdentifierToEmail(identifier: string): string {
+  const trimmed = (identifier || '').trim().toLowerCase();
+  if (trimmed.includes('@')) {
+    return trimmed;
+  }
+  const cleanUsername = trimmed.replace(/[^a-z0-9_.-]/g, '');
+  return `${cleanUsername || 'user'}@makkahprinters.local`;
+}
+
 export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [db, setDb] = useState<DatabaseState>(initialEmptyState);
   const [isReady, setIsReady] = useState(false);
@@ -479,6 +504,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           },
           businesses: parsed.businesses?.length ? parsed.businesses : createDefaultSaaSRegistry().businesses,
           paymentRequests: Array.isArray(parsed.paymentRequests) ? parsed.paymentRequests : [],
+          partyAccounts: Array.isArray(parsed.partyAccounts) ? parsed.partyAccounts : [],
           updatedAt: parsed.updatedAt || new Date().toISOString(),
         };
       }
@@ -3097,22 +3123,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return found || null;
   }, [currentUser, db.userAccessList, db.settings.adminEmail, currentBusiness, activeBusinessId]);
 
-  const normalizePartyLoginId = (loginId: string): string => {
-    return (loginId || '').trim().toLowerCase().replace(/[^a-z0-9_.-@]/g, '');
-  };
-
-  const normalizePartyLoginEmail = (loginId: string): string => {
-    const clean = normalizePartyLoginId(loginId);
-    if (!clean) return 'party@party.makkahprinters.local';
-    if (clean.includes('@')) return clean;
-    return `${clean}@party.makkahprinters.local`;
-  };
-
-  const toFirebasePartyPassword = (rawPwd: string): string => {
-    const p = (rawPwd || '').trim();
-    return p.length >= 6 ? p : `${p}__ptl`;
-  };
-
   const currentPartyAccount = useMemo<PartyPortalAccount | null>(() => {
     if (!currentUser) return null;
     const email = (currentUser.email || '').toLowerCase().trim();
@@ -4770,15 +4780,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.error('Google Sign-In error', err);
       return { success: false, error: err?.message || 'গুগল লগইন সম্পন্ন করা যায়নি।' };
     }
-  };
-
-  const normalizeIdentifierToEmail = (identifier: string): string => {
-    const trimmed = (identifier || '').trim().toLowerCase();
-    if (trimmed.includes('@')) {
-      return trimmed;
-    }
-    const cleanUsername = trimmed.replace(/[^a-z0-9_.-]/g, '');
-    return `${cleanUsername || 'user'}@makkahprinters.local`;
   };
 
   const loginWithEmailOrUsername = async (identifier: string, password: string) => {
