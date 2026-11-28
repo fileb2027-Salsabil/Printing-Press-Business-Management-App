@@ -25,7 +25,7 @@ interface PrintEventDetail {
 export const PrintPreviewModal: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [contentHtml, setContentHtml] = useState('');
-  const [docTitle, setDocTitle] = useState('Press Business Management - প্রিন্ট ভিউ');
+  const [docTitle, setDocTitle] = useState('Press Management (প্রেস ম্যানেজমেন্ট) - প্রিন্ট ভিউ');
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
 
@@ -57,7 +57,7 @@ export const PrintPreviewModal: React.FC = () => {
       }
 
       const html = detail.html || (targetEl ? targetEl.innerHTML : '');
-      const title = detail.title || document.title || 'Press Business Management - প্রিন্ট ও ভাউচার';
+      const title = detail.title || document.title || 'Press Management (প্রেস ম্যানেজমেন্ট) - প্রিন্ট ও ভাউচার';
 
       if (html) {
         setContentHtml(html);

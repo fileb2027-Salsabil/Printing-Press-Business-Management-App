@@ -110,7 +110,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
               <h3 className="text-base sm:text-lg font-bold text-slate-900">
                 {mode === 'login' ? 'অ্যাকাউন্টে লগইন করুন' : 'নতুন অ্যাকাউন্ট তৈরি করুন'}
               </h3>
-              <p className="text-[11px] text-slate-500">Press Business Management & Accounting • MD. Salsabil</p>
+              <p className="text-[11px] text-slate-500">Press Management — প্রেস ম্যানেজমেন্ট • MD. Salsabil</p>
             </div>
           </div>
           <button

@@ -212,7 +212,7 @@ function fallbackIframePrint(customTarget?: HTMLElement | string | null) {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>প্রিন্ট ভিউ - Press Business Management</title>
+          <title>প্রিন্ট ভিউ - Press Management (প্রেস ম্যানেজমেন্ট)</title>
           ${stylesHtml}
         </head>
         <body>

@@ -128,7 +128,7 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({ isOpen, onClos
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>মক্কা প্রিন্টার্স - লঞ্চার</title>
+  <title>Press Management — প্রেস ম্যানেজমেন্ট - লঞ্চার</title>
   <meta http-equiv="refresh" content="0; url=${appUrl}">
   <style>
     body {
@@ -170,8 +170,8 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({ isOpen, onClos
 </head>
 <body>
   <div class="card">
-    <h2>মক্কা প্রিন্টার্স</h2>
-    <p>প্রেস ম্যানেজমেন্ট সফটওয়্যার চালু হচ্ছে...</p>
+    <h2>Press Management — প্রেস ম্যানেজমেন্ট</h2>
+    <p>সফটওয়্যার চালু হচ্ছে...</p>
     <p>স্বয়ংক্রিয়ভাবে ওপেন না হলে নিচের বোতামে চাপ দিন:</p>
     <a href="${appUrl}">সফটওয়্যার ওপেন করুন</a>
   </div>
@@ -182,7 +182,7 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({ isOpen, onClos
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'Makkah-Printers-App.html';
+    a.download = 'Press-Management-App.html';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

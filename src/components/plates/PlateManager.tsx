@@ -24,6 +24,12 @@ import {
   Sparkles,
 } from 'lucide-react';
 
+const GODOWN_OPTIONS = ['গোডাউন-১', 'গোডাউন-২'] as const;
+const LOT_PRESETS = ['লট-১', 'লট-২', 'লট-৩', 'লট-৪', 'লট-৫', 'লট-৬', 'লট-৭', 'লট-৮', 'লট-৯', 'লট-১০'];
+
+const getEffectiveGodownName = (plt: Pick<PlateRecord, 'godownName'>) =>
+  plt.godownName === 'গোডাউন-২' ? 'গোডাউন-২' : 'গোডাউন-১';
+
 export const PlateManager: React.FC = () => {
   const { db, isReadOnly, canDeletePlates, addPlate, updatePlate, batchUpdatePlates, deletePlate, addParty, addBook } = useDatabase();
   const lang = db.settings.language;
@@ -33,7 +39,7 @@ export const PlateManager: React.FC = () => {
   const plates = db.plates || [];
 
   const [search, setSearch] = useState('');
-  const [locationFilter, setLocationFilter] = useState<'all' | PlateLocation>('all');
+  const [locationFilter, setLocationFilter] = useState<'all' | PlateLocation | 'godown-1' | 'godown-2'>('all');
   const [selectedPartyFilter, setSelectedPartyFilter] = useState('');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -52,7 +58,8 @@ export const PlateManager: React.FC = () => {
 
   const [isBatchLocationModalOpen, setIsBatchLocationModalOpen] = useState(false);
   const [batchTargetLocation, setBatchTargetLocation] = useState<PlateLocation>('godown');
-  const [batchLotNo, setBatchLotNo] = useState('লট-০১');
+  const [batchGodownName, setBatchGodownName] = useState<string>('গোডাউন-১');
+  const [batchLotNo, setBatchLotNo] = useState('লট-১');
 
   const firstInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,7 +67,8 @@ export const PlateManager: React.FC = () => {
   const [partyInput, setPartyInput] = useState('');
   const [selectedPartyId, setSelectedPartyId] = useState('');
   const [bookInput, setBookInput] = useState('');
-  const [lotNo, setLotNo] = useState('');
+  const [godownName, setGodownName] = useState<string>('গোডাউন-১');
+  const [lotNo, setLotNo] = useState('লট-১');
   const [plateCount, setPlateCount] = useState<number | ''>(4);
   const [size, setSize] = useState('২৩×৩৬');
   const [location, setLocation] = useState<PlateLocation>('press');
@@ -87,9 +95,18 @@ export const PlateManager: React.FC = () => {
       ? plt.partyName.toLowerCase().includes(search.toLowerCase()) ||
         plt.bookName.toLowerCase().includes(search.toLowerCase()) ||
         plt.size.toLowerCase().includes(search.toLowerCase()) ||
+        (plt.godownName && plt.godownName.toLowerCase().includes(search.toLowerCase())) ||
+        (plt.lotNo && plt.lotNo.toLowerCase().includes(search.toLowerCase())) ||
         (plt.returnedThrough && plt.returnedThrough.toLowerCase().includes(search.toLowerCase()))
       : true;
-    const matchLoc = locationFilter === 'all' ? true : plt.location === locationFilter;
+    const matchLoc =
+      locationFilter === 'all'
+        ? true
+        : locationFilter === 'godown-1'
+        ? plt.location === 'godown' && getEffectiveGodownName(plt) === 'গোডাউন-১'
+        : locationFilter === 'godown-2'
+        ? plt.location === 'godown' && getEffectiveGodownName(plt) === 'গোডাউন-২'
+        : plt.location === locationFilter;
     const matchParty = selectedPartyFilter ? plt.partyId === selectedPartyFilter : true;
     return matchSearch && matchLoc && matchParty;
   });
@@ -101,6 +118,12 @@ export const PlateManager: React.FC = () => {
     .reduce((sum, p) => sum + (p.plateCount || 0), 0);
   const inGodownCount = plates
     .filter((p) => p.location === 'godown')
+    .reduce((sum, p) => sum + (p.plateCount || 0), 0);
+  const inGodown1Count = plates
+    .filter((p) => p.location === 'godown' && getEffectiveGodownName(p) === 'গোডাউন-১')
+    .reduce((sum, p) => sum + (p.plateCount || 0), 0);
+  const inGodown2Count = plates
+    .filter((p) => p.location === 'godown' && getEffectiveGodownName(p) === 'গোডাউন-২')
     .reduce((sum, p) => sum + (p.plateCount || 0), 0);
   const soldCount = plates
     .filter((p) => p.location === 'sold')
@@ -134,16 +157,18 @@ export const PlateManager: React.FC = () => {
     setSelectedPlateIds((prev) => Array.from(new Set([...prev, ...partyPlateIds])));
   };
 
-  const handleBatchMoveLocation = (targetLoc: PlateLocation, customLot?: string) => {
+  const handleBatchMoveLocation = (targetLoc: PlateLocation, customLot?: string, customGodown?: string) => {
     if (isReadOnly || selectedPlateIds.length === 0) return;
-    const lot = targetLoc === 'godown' ? (customLot || batchLotNo || 'লট-০১') : undefined;
+    const selectedGodown = targetLoc === 'godown' ? (customGodown || batchGodownName || 'গোডাউন-১') : undefined;
+    const lot = targetLoc === 'godown' ? (customLot || batchLotNo || 'লট-১') : undefined;
     batchUpdatePlates(selectedPlateIds, {
       location: targetLoc,
+      godownName: selectedGodown,
       lotNo: lot,
     });
     const locNames: Record<PlateLocation, string> = {
       press: 'প্রেসে স্থানান্তর',
-      godown: `গোডাউনে স্থানান্তর (${lot || 'লট-০১'})`,
+      godown: `${selectedGodown || 'গোডাউন-১'} (${lot || 'লট-১'})`,
       sold: 'বিক্রি সম্পন্ন',
       returned: 'পার্টিকে ফেরত',
     };
@@ -187,7 +212,8 @@ export const PlateManager: React.FC = () => {
       setSelectedPartyId(plate.partyId);
       setPartyInput(plate.partyName);
       setBookInput(plate.bookName || '');
-      setLotNo(plate.lotNo || '');
+      setGodownName(plate.godownName || 'গোডাউন-১');
+      setLotNo(plate.lotNo || 'লট-১');
       setPlateCount(plate.plateCount);
       setSize(plate.size || '২৩×৩৬');
       setLocation(plate.location);
@@ -200,7 +226,8 @@ export const PlateManager: React.FC = () => {
       setSelectedPartyId(defaultParty?.id || '');
       setPartyInput(defaultParty?.name || '');
       setBookInput('');
-      setLotNo('');
+      setGodownName('গোডাউন-১');
+      setLotNo('লট-১');
       setPlateCount(4);
       setSize('২৩×৩৬');
       setLocation('press');
@@ -271,7 +298,8 @@ export const PlateManager: React.FC = () => {
       partyId: finalPartyId,
       partyName: finalPartyName,
       bookName: finalBookName,
-      lotNo: location === 'godown' ? lotNo.trim() || 'লট-০১' : undefined,
+      godownName: location === 'godown' ? (godownName || 'গোডাউন-১') : undefined,
+      lotNo: location === 'godown' ? lotNo.trim() || 'লট-১' : undefined,
       plateCount: countNum,
       size: size.trim(),
       location,
@@ -286,10 +314,10 @@ export const PlateManager: React.FC = () => {
     } else {
       addPlate(payload);
       setSuccessMessage(
-        `প্লেট সফলভাবে সংরক্ষিত হয়েছে (${payload.partyName}${payload.lotNo ? `, গোডাউন লট: ${payload.lotNo}` : ''}, ${payload.plateCount} টি)! পরবর্তী এন্ট্রি করতে পারেন।`
+        `প্লেট সফলভাবে সংরক্ষিত হয়েছে (${payload.partyName}${payload.godownName ? `, ${payload.godownName}` : ''}${payload.lotNo ? ` (${payload.lotNo})` : ''}, ${payload.plateCount} টি)! পরবর্তী এন্ট্রি করতে পারেন।`
       );
       setBookInput('');
-      setLotNo('');
+      setLotNo('লট-১');
       setPlateCount(4);
       setNotes('');
       setTimeout(() => {
@@ -305,7 +333,7 @@ export const PlateManager: React.FC = () => {
     }
   };
 
-  const getLocationBadge = (loc: PlateLocation) => {
+  const getLocationBadge = (loc: PlateLocation, plateGodownName?: string) => {
     switch (loc) {
       case 'press':
         return (
@@ -318,7 +346,7 @@ export const PlateManager: React.FC = () => {
         return (
           <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200 inline-flex items-center space-x-1">
             <Package className="w-3 h-3" />
-            <span>গোডাউনে আছে</span>
+            <span>{plateGodownName || 'গোডাউন-১'}</span>
           </span>
         );
       case 'sold':
@@ -399,13 +427,19 @@ export const PlateManager: React.FC = () => {
 
             <div className="flex justify-between border-b pb-2 pt-1">
               <span className="text-slate-500 font-semibold">বর্তমান অবস্থান:</span>
-              <span>{getLocationBadge(selectedPlateSlip.location)}</span>
+              <span>{getLocationBadge(selectedPlateSlip.location, selectedPlateSlip.godownName)}</span>
             </div>
 
             {selectedPlateSlip.location === 'godown' && (
-              <div className="flex justify-between border-b pb-2 pt-1 bg-amber-50/70 p-2.5 rounded-lg border border-amber-200">
-                <span className="text-amber-900 font-bold">গোডাউনের লট নম্বর (Lot No):</span>
-                <span className="font-black text-amber-950 text-sm">{selectedPlateSlip.lotNo || 'লট উল্লেখ নেই'}</span>
+              <div className="space-y-1.5 bg-amber-50/70 p-2.5 rounded-lg border border-amber-200">
+                <div className="flex justify-between">
+                  <span className="text-amber-900 font-semibold">গোডাউনের নাম:</span>
+                  <span className="font-black text-amber-950 text-xs">{getEffectiveGodownName(selectedPlateSlip)}</span>
+                </div>
+                <div className="flex justify-between border-t border-amber-200/70 pt-1.5">
+                  <span className="text-amber-900 font-bold">গোডাউনের লট নম্বর (Lot No):</span>
+                  <span className="font-black text-amber-950 text-sm">{selectedPlateSlip.lotNo || 'লট উল্লেখ নেই'}</span>
+                </div>
               </div>
             )}
 
@@ -488,7 +522,7 @@ export const PlateManager: React.FC = () => {
         <div className="bg-white p-3.5 rounded-xl border border-amber-100 bg-amber-50/20 shadow-xs">
           <span className="text-[10px] uppercase font-bold text-amber-600">গোডাউনে আছে</span>
           <p className="text-lg font-black text-amber-800 mt-0.5">{inGodownCount} টি</p>
-          <span className="text-[10px] text-amber-600">তাক / স্টোরে সংরক্ষিত</span>
+          <span className="text-[10px] text-amber-700 font-semibold">গোডাউন-১: {inGodown1Count} | গোডাউন-২: {inGodown2Count}</span>
         </div>
         <div className="bg-white p-3.5 rounded-xl border border-purple-100 bg-purple-50/20 shadow-xs">
           <span className="text-[10px] uppercase font-bold text-purple-600">বিক্রি হয়েছে</span>
@@ -510,7 +544,7 @@ export const PlateManager: React.FC = () => {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="পার্টির নাম, বইয়ের নাম, সাইজ বা ফেরত গ্রহীতার নাম দিয়ে খুঁজুন..."
+            placeholder="পার্টির নাম, বইয়ের নাম, গোডাউন/লট বা ফেরত গ্রহীতার নাম দিয়ে খুঁজুন..."
             className="w-full text-xs outline-none bg-transparent"
           />
         </div>
@@ -524,7 +558,9 @@ export const PlateManager: React.FC = () => {
           >
             <option value="all">সকল অবস্থান</option>
             <option value="press">প্রেসে আছে</option>
-            <option value="godown">গোডাউনে আছে</option>
+            <option value="godown">গোডাউনে আছে (সকল)</option>
+            <option value="godown-1">গোডাউন-১</option>
+            <option value="godown-2">গোডাউন-২</option>
             <option value="sold">বিক্রি সম্পন্ন</option>
             <option value="returned">পার্টিকে ফেরত</option>
           </select>
@@ -616,7 +652,8 @@ export const PlateManager: React.FC = () => {
               type="button"
               onClick={() => {
                 setBatchTargetLocation('godown');
-                setBatchLotNo('লট-০১');
+                setBatchGodownName('গোডাউন-১');
+                setBatchLotNo('লট-১');
                 setIsBatchLocationModalOpen(true);
               }}
               className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white transition flex items-center space-x-1.5 shadow-sm"
@@ -752,25 +789,33 @@ export const PlateManager: React.FC = () => {
                       </td>
                       <td className="p-3 text-center whitespace-nowrap">
                         <div className="flex flex-col items-center gap-1.5">
-                          {getLocationBadge(plt.location)}
+                          {getLocationBadge(plt.location, plt.godownName)}
                           {!isReadOnly && (
                             <select
-                              value={plt.location}
+                              value={
+                                plt.location === 'godown'
+                                  ? getEffectiveGodownName(plt) === 'গোডাউন-২'
+                                    ? 'godown-2'
+                                    : 'godown-1'
+                                  : plt.location
+                              }
                               onChange={(e) => {
-                                const newLoc = e.target.value as PlateLocation;
-                                if (newLoc === 'returned') {
+                                const val = e.target.value;
+                                if (val === 'returned') {
                                   handleOpenModal({ ...plt, location: 'returned' });
-                                } else if (newLoc === 'godown') {
-                                  handleOpenModal({ ...plt, location: 'godown' });
+                                } else if (val === 'godown-1' || val === 'godown-2') {
+                                  const chosenGodown = val === 'godown-2' ? 'গোডাউন-২' : 'গোডাউন-১';
+                                  handleOpenModal({ ...plt, location: 'godown', godownName: chosenGodown });
                                 } else {
-                                  updatePlate(plt.id, { location: newLoc });
+                                  updatePlate(plt.id, { location: val as PlateLocation });
                                 }
                               }}
                               className="no-print text-[11px] font-bold rounded border border-slate-200 px-1.5 py-0.5 bg-white text-slate-700 hover:border-emerald-600 focus:outline-none transition cursor-pointer shadow-2xs"
                               title="প্লেটের অবস্থান দ্রুত পরিবর্তন করুন"
                             >
                               <option value="press">🏢 প্রেসে</option>
-                              <option value="godown">📦 গোডাউনে</option>
+                              <option value="godown-1">📦 গোডাউন-১</option>
+                              <option value="godown-2">📦 গোডাউন-২</option>
                               <option value="sold">💰 বিক্রি</option>
                               <option value="returned">↩️ ফেরত</option>
                             </select>
@@ -779,9 +824,14 @@ export const PlateManager: React.FC = () => {
                       </td>
                       <td className="p-3 text-center whitespace-nowrap">
                         {plt.location === 'godown' ? (
-                          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                            {plt.lotNo || 'লট-০১'}
-                          </span>
+                          <div className="inline-flex flex-col items-center gap-0.5">
+                            <span className="text-[10px] font-bold text-amber-800">
+                              {getEffectiveGodownName(plt)}
+                            </span>
+                            <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                              {plt.lotNo || 'লট-১'}
+                            </span>
+                          </div>
                         ) : (
                           <span className="text-slate-400 text-xs">-</span>
                         )}
@@ -975,50 +1025,147 @@ export const PlateManager: React.FC = () => {
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   প্লেটের বর্তমান অবস্থান *
                 </label>
-                <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { id: 'press', label: 'প্রেস', color: 'border-blue-400 bg-blue-50/50' },
-                    { id: 'godown', label: 'গোডাউন', color: 'border-amber-400 bg-amber-50/50' },
-                    { id: 'sold', label: 'বিক্রি', color: 'border-purple-400 bg-purple-50/50' },
-                    { id: 'returned', label: 'ফেরত', color: 'border-emerald-500 bg-emerald-50/60' },
-                  ].map((locItem) => (
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLocation('press')}
+                    className={`py-2 px-1 text-center rounded-lg border text-xs font-bold transition ${
+                      location === 'press'
+                        ? 'border-blue-400 bg-blue-50/50 ring-2 ring-emerald-600 text-slate-900 shadow-xs'
+                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    প্রেস
+                  </button>
+                  {GODOWN_OPTIONS.map((gName) => (
                     <button
                       type="button"
-                      key={locItem.id}
-                      onClick={() => setLocation(locItem.id as PlateLocation)}
+                      key={gName}
+                      onClick={() => {
+                        setLocation('godown');
+                        setGodownName(gName);
+                      }}
                       className={`py-2 px-1 text-center rounded-lg border text-xs font-bold transition ${
-                        location === locItem.id
-                          ? `${locItem.color} ring-2 ring-emerald-600 text-slate-900 shadow-xs`
+                        location === 'godown' && godownName === gName
+                          ? 'border-amber-400 bg-amber-50/70 ring-2 ring-emerald-600 text-slate-900 shadow-xs'
                           : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                       }`}
                     >
-                      {locItem.label}
+                      {gName}
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    onClick={() => setLocation('sold')}
+                    className={`py-2 px-1 text-center rounded-lg border text-xs font-bold transition ${
+                      location === 'sold'
+                        ? 'border-purple-400 bg-purple-50/50 ring-2 ring-emerald-600 text-slate-900 shadow-xs'
+                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    বিক্রি
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLocation('returned')}
+                    className={`py-2 px-1 text-center rounded-lg border text-xs font-bold transition col-span-2 sm:col-span-1 ${
+                      location === 'returned'
+                        ? 'border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-600 text-slate-900 shadow-xs'
+                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    ফেরত
+                  </button>
                 </div>
               </div>
 
-              {/* Conditional Godown Lot Number */}
+              {/* Conditional Godown-1 / Godown-2 & Lot Number (1-10 Selectable + Manual) */}
               {location === 'godown' && (
-                <div className="p-3.5 bg-amber-50/70 border border-amber-300 rounded-xl space-y-1.5 animate-in fade-in duration-150">
+                <div className="p-3.5 bg-amber-50/70 border border-amber-300 rounded-xl space-y-2.5 animate-in fade-in duration-150">
                   <div className="flex items-center justify-between">
                     <label className="block text-xs font-bold text-amber-950">
-                      গোডাউনের লট নম্বর (Lot No) *
+                      গোডাউন ও লট নম্বর (Lot No 1–10 / ম্যানুয়াল) *
                     </label>
                     <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
-                      গোডাউন লট ট্র্যাকিং
+                      {godownName}
                     </span>
                   </div>
-                  <input
-                    type="text"
-                    value={lotNo}
-                    onChange={(e) => setLotNo(e.target.value)}
-                    placeholder="যেমন: লট-০১, লট-০৫, তাক-৩ ইত্যাদি"
-                    className="w-full border rounded-lg p-2.5 text-xs font-bold text-slate-900 bg-white border-amber-300"
-                  />
-                  <p className="text-[11px] text-amber-800">
-                    প্লেটটি গোডাউনের কোন লটে বা তাকে রাখা হয়েছে তা লিখে রাখুন।
-                  </p>
+
+                  {/* Godown-1 vs Godown-2 Switcher */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {GODOWN_OPTIONS.map((gName) => (
+                      <button
+                        type="button"
+                        key={gName}
+                        onClick={() => setGodownName(gName)}
+                        className={`py-1.5 px-2 rounded-lg border text-xs font-bold transition ${
+                          godownName === gName
+                            ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                            : 'bg-white text-amber-900 border-amber-300 hover:bg-amber-100/60'
+                        }`}
+                      >
+                        📦 {gName}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Selectable Lot 1 to 10 */}
+                  <div>
+                    <span className="block text-[11px] font-bold text-amber-900 mb-1">
+                      লট নম্বর সিলেক্ট করুন (১ থেকে ১০):
+                    </span>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {LOT_PRESETS.map((presetLot) => (
+                        <button
+                          type="button"
+                          key={presetLot}
+                          onClick={() => setLotNo(presetLot)}
+                          className={`py-1 px-1 rounded-lg border text-[11px] font-bold transition ${
+                            lotNo.trim() === presetLot
+                              ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
+                              : 'bg-white text-slate-800 border-amber-200 hover:bg-amber-100'
+                          }`}
+                        >
+                          {presetLot}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Manual Lot Input + Dropdown */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                    <div>
+                      <label className="block text-[10px] font-bold text-amber-900 mb-0.5">
+                        অথবা তালিকা থেকে বাছুন:
+                      </label>
+                      <select
+                        value={LOT_PRESETS.includes(lotNo.trim()) ? lotNo.trim() : ''}
+                        onChange={(e) => {
+                          if (e.target.value) setLotNo(e.target.value);
+                        }}
+                        className="w-full border border-amber-300 rounded-lg p-2 text-xs font-bold text-slate-900 bg-white"
+                      >
+                        <option value="">-- লট ১–১০ বাছুন --</option>
+                        {LOT_PRESETS.map((presetLot) => (
+                          <option key={presetLot} value={presetLot}>
+                            {presetLot}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-amber-900 mb-0.5">
+                        ম্যানুয়াল লট লিখুন (ইচ্ছামত):
+                      </label>
+                      <input
+                        type="text"
+                        value={lotNo}
+                        onChange={(e) => setLotNo(e.target.value)}
+                        placeholder="যেমন: লট-১১, তাক-৩ বা যেকোনো নাম"
+                        className="w-full border rounded-lg p-2 text-xs font-bold text-slate-900 bg-white border-amber-300"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1129,32 +1276,78 @@ export const PlateManager: React.FC = () => {
                   কোথায় পাঠাতে চান? (নতুন অবস্থান নির্বাচন করুন) *
                 </label>
                 <select
-                  value={batchTargetLocation}
-                  onChange={(e) => setBatchTargetLocation(e.target.value as PlateLocation)}
+                  value={
+                    batchTargetLocation === 'godown'
+                      ? batchGodownName === 'গোডাউন-২'
+                        ? 'godown-2'
+                        : 'godown-1'
+                      : batchTargetLocation
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === 'godown-1' || val === 'godown-2') {
+                      setBatchTargetLocation('godown');
+                      setBatchGodownName(val === 'godown-2' ? 'গোডাউন-২' : 'গোডাউন-১');
+                    } else {
+                      setBatchTargetLocation(val as PlateLocation);
+                    }
+                  }}
                   className="w-full border rounded-lg p-2 text-xs font-bold bg-white text-slate-900"
                 >
-                  <option value="godown">📦 গোডাউনে পাঠান (লট নম্বর সহ)</option>
+                  <option value="godown-1">📦 গোডাউন-১ এ পাঠান (লট নম্বর সহ)</option>
+                  <option value="godown-2">📦 গোডাউন-২ এ পাঠান (লট নম্বর সহ)</option>
                   <option value="press">🏢 প্রেসে আনুন</option>
                   <option value="sold">💰 বিক্রি সম্পন্ন মার্ক করুন</option>
                 </select>
               </div>
 
               {batchTargetLocation === 'godown' && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    গোডাউন লট নম্বর *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={batchLotNo}
-                    onChange={(e) => setBatchLotNo(e.target.value)}
-                    placeholder="যেমন: লট-০১, লট-০২, তাক-৩"
-                    className="w-full border border-amber-300 rounded-lg p-2 text-xs font-bold text-slate-900 bg-white"
-                  />
-                  <p className="text-[10px] text-slate-500 mt-0.5">
-                    নির্বাচিত সব বইয়ের প্লেট এই লটে গোডাউনে সংরক্ষিত থাকবে।
-                  </p>
+                <div className="space-y-2 p-3 bg-amber-50/70 rounded-xl border border-amber-200">
+                  <div className="grid grid-cols-2 gap-2">
+                    {GODOWN_OPTIONS.map((gName) => (
+                      <button
+                        type="button"
+                        key={gName}
+                        onClick={() => setBatchGodownName(gName)}
+                        className={`py-1.5 rounded-lg border text-xs font-bold transition ${
+                          batchGodownName === gName
+                            ? 'bg-amber-600 text-white border-amber-600'
+                            : 'bg-white text-amber-900 border-amber-300'
+                        }`}
+                      >
+                        {gName}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-5 gap-1">
+                    {LOT_PRESETS.map((presetLot) => (
+                      <button
+                        type="button"
+                        key={presetLot}
+                        onClick={() => setBatchLotNo(presetLot)}
+                        className={`py-1 rounded border text-[11px] font-bold transition ${
+                          batchLotNo.trim() === presetLot
+                            ? 'bg-emerald-700 text-white border-emerald-700'
+                            : 'bg-white text-slate-700 border-amber-200 hover:bg-amber-100'
+                        }`}
+                      >
+                        {presetLot}
+                      </button>
+                    ))}
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      গোডাউন লট নম্বর (সিলেক্ট বা ম্যানুয়াল) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={batchLotNo}
+                      onChange={(e) => setBatchLotNo(e.target.value)}
+                      placeholder="যেমন: লট-১ বা ম্যানুয়াল লিখুন"
+                      className="w-full border border-amber-300 rounded-lg p-2 text-xs font-bold text-slate-900 bg-white"
+                    />
+                  </div>
                 </div>
               )}
             </div>
@@ -1169,7 +1362,7 @@ export const PlateManager: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => handleBatchMoveLocation(batchTargetLocation, batchLotNo)}
+                onClick={() => handleBatchMoveLocation(batchTargetLocation, batchLotNo, batchGodownName)}
                 className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-xs"
               >
                 ✓ এক ক্লিকে অবস্থান পরিবর্তন করুন

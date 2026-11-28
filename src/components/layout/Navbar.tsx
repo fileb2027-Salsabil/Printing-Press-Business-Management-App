@@ -105,7 +105,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, activeTab: _act
                 {activePressName}
               </h1>
               <p className="text-[10px] text-slate-500 hidden md:block truncate leading-tight">
-                Press Business Management & Accounting • Designed by MD. Salsabil
+                Press Management — প্রেস ম্যানেজমেন্ট • Designed by MD. Salsabil
               </p>
             </div>
           </div>

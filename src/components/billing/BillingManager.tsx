@@ -17,6 +17,8 @@ import {
   Calendar,
   AlertCircle,
   ArrowLeft,
+  BookOpen,
+  X,
 } from 'lucide-react';
 import { PhoneLink } from '../common/PhoneLink';
 
@@ -45,6 +47,18 @@ export const BillingManager: React.FC = () => {
   const [paidAmount, setPaidAmount] = useState(0);
   const [invoiceNotes, setInvoiceNotes] = useState('');
   const [formError, setFormError] = useState('');
+
+  // Book-wise billing quick entry state (বই হিসেবে বিল যোগ করার অপশন)
+  const [isBookBillExpanded, setIsBookBillExpanded] = useState(false);
+  const [bookBillBookId, setBookBillBookId] = useState('');
+  const [bookBillName, setBookBillName] = useState('');
+  const [bookBillDate, setBookBillDate] = useState(today);
+  const [bookBillPieces, setBookBillPieces] = useState<number>(100);
+  const [bookBillTotalPages, setBookBillTotalPages] = useState<number>(0);
+  const [bookBillBlackPages, setBookBillBlackPages] = useState<number>(0);
+  const [bookBillColorPages, setBookBillColorPages] = useState<number>(0);
+  const [bookBillRate, setBookBillRate] = useState<number>(0);
+  const [bookBillNotes, setBookBillNotes] = useState('');
 
   const selectedParty = db.parties.find((p) => p.id === selectedPartyId);
   const previousDue = selectedParty ? getPartyBalance(selectedParty.id) : 0;
@@ -98,6 +112,16 @@ export const BillingManager: React.FC = () => {
     setPaidAmount(0);
     setInvoiceNotes('');
     setFormError('');
+    setIsBookBillExpanded(false);
+    setBookBillBookId('');
+    setBookBillName('');
+    setBookBillDate(today);
+    setBookBillPieces(100);
+    setBookBillTotalPages(0);
+    setBookBillBlackPages(0);
+    setBookBillColorPages(0);
+    setBookBillRate(0);
+    setBookBillNotes('');
     setIsCreateModalOpen(true);
   };
 
@@ -157,6 +181,15 @@ export const BillingManager: React.FC = () => {
     });
   };
 
+  // Sync production items while keeping manually-added book bill items intact
+  const syncProductionItems = (prodIds: string[]) => {
+    const prodItems = buildCustomItems(prodIds);
+    setCustomItems((prev) => {
+      const manualBookItems = prev.filter((item) => !item.productionId);
+      return [...prodItems, ...manualBookItems];
+    });
+  };
+
   // Toggle selection of unbilled production item
   const handleToggleProd = (prodId: string) => {
     const exists = selectedProdIds.includes(prodId);
@@ -164,7 +197,7 @@ export const BillingManager: React.FC = () => {
       ? selectedProdIds.filter((id) => id !== prodId)
       : [...selectedProdIds, prodId];
     setSelectedProdIds(newSelected);
-    setCustomItems(buildCustomItems(newSelected));
+    syncProductionItems(newSelected);
   };
 
   // Select only DC productions (20*30 DC)
@@ -176,7 +209,7 @@ export const BillingManager: React.FC = () => {
       })
       .map((p) => p.id);
     setSelectedProdIds(dcIds);
-    setCustomItems(buildCustomItems(dcIds));
+    syncProductionItems(dcIds);
     setUnbilledCategoryFilter('dc');
   };
 
@@ -189,7 +222,7 @@ export const BillingManager: React.FC = () => {
       })
       .map((p) => p.id);
     setSelectedProdIds(ddIds);
-    setCustomItems(buildCustomItems(ddIds));
+    syncProductionItems(ddIds);
     setUnbilledCategoryFilter('dd');
   };
 
@@ -202,7 +235,7 @@ export const BillingManager: React.FC = () => {
       })
       .map((p) => p.id);
     setSelectedProdIds(coverIds);
-    setCustomItems(buildCustomItems(coverIds));
+    syncProductionItems(coverIds);
     setUnbilledCategoryFilter('cover');
   };
 
@@ -210,14 +243,14 @@ export const BillingManager: React.FC = () => {
   const handleSelectAllCombined = () => {
     const allIds = unbilledProductions.map((p) => p.id);
     setSelectedProdIds(allIds);
-    setCustomItems(buildCustomItems(allIds));
+    syncProductionItems(allIds);
     setUnbilledCategoryFilter('all');
   };
 
-  // Clear all selections
+  // Clear all production selections (preserves manual book bill items)
   const handleClearAllSelected = () => {
     setSelectedProdIds([]);
-    setCustomItems([]);
+    syncProductionItems([]);
   };
 
   // Select all or deselect all unbilled productions in one click
@@ -227,6 +260,86 @@ export const BillingManager: React.FC = () => {
     } else {
       handleSelectAllCombined();
     }
+  };
+
+  const handleAddBookBillItem = () => {
+    setFormError('');
+    const selectedBookObj = db.books.find((b) => b.id === bookBillBookId);
+    const finalName = (bookBillName.trim() || selectedBookObj?.name || '').trim();
+    if (!finalName) {
+      setFormError('অনুগ্রহ করে বইয়ের নাম নির্বাচন করুন বা লিখুন।');
+      return;
+    }
+    if (!bookBillPieces || bookBillPieces <= 0) {
+      setFormError('অনুগ্রহ করে মোট বই (পিস) সংখ্যা লিখুন।');
+      return;
+    }
+    const pagesSummary = [
+      `মোট পৃষ্ঠা: ${bookBillTotalPages || 0}`,
+      `কালো: ${bookBillBlackPages || 0}`,
+      `রঙিন: ${bookBillColorPages || 0}`,
+    ].join(', ');
+    const fullDesc = `বই হিসেবে বিল (${pagesSummary})${bookBillNotes.trim() ? ` | ${bookBillNotes.trim()}` : ''}`;
+
+    const newItem: InvoiceItem = {
+      id: `bookbill_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      productionDate: bookBillDate || undefined,
+      bookId: selectedBookObj?.id || 'manual_book',
+      bookName: finalName,
+      itemType: 'book',
+      forma: selectedBookObj?.forma || 0,
+      plates: 0,
+      copies: bookBillPieces,
+      reams: 0,
+      totalPages: bookBillTotalPages || 0,
+      blackPages: bookBillBlackPages || 0,
+      colorPages: bookBillColorPages || 0,
+      billingBasis: 'book',
+      unit: 'পিস',
+      quantity: bookBillPieces,
+      rate: bookBillRate || 0,
+      amount: Math.round(bookBillPieces * (bookBillRate || 0) * 100) / 100,
+      description: fullDesc,
+    };
+
+    setCustomItems((prev) => [...prev, newItem]);
+    setBookBillBookId('');
+    setBookBillName('');
+    setBookBillPieces(100);
+    setBookBillTotalPages(0);
+    setBookBillBlackPages(0);
+    setBookBillColorPages(0);
+    setBookBillRate(0);
+    setBookBillNotes('');
+    setIsBookBillExpanded(false);
+  };
+
+  const handleRemoveCustomItem = (index: number) => {
+    setCustomItems((prev) => {
+      const removed = prev[index];
+      if (removed?.productionId) {
+        setSelectedProdIds((ids) => ids.filter((id) => id !== removed.productionId));
+      }
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  const handleBookMetaChange = (
+    index: number,
+    field: 'totalPages' | 'blackPages' | 'colorPages',
+    value: number
+  ) => {
+    setCustomItems((prev) => {
+      const next = [...prev];
+      const item = next[index];
+      const updated = { ...item, [field]: value };
+      const totalP = updated.totalPages ?? 0;
+      const blackP = updated.blackPages ?? 0;
+      const colorP = updated.colorPages ?? 0;
+      updated.description = `বই হিসেবে বিল (মোট পৃষ্ঠা: ${totalP}, কালো: ${blackP}, রঙিন: ${colorP})`;
+      next[index] = updated;
+      return next;
+    });
   };
 
   const handleRateChange = (index: number, newRate: number) => {
@@ -270,6 +383,9 @@ export const BillingManager: React.FC = () => {
       } else if (newBasis === 'forma') {
         newQty = prod?.forma || item.forma || 1;
         newUnit = 'ফর্মা';
+      } else if (newBasis === 'book') {
+        newQty = prod?.copies || item.copies || item.quantity || 1;
+        newUnit = 'পিস';
       }
 
       next[index] = {
@@ -277,6 +393,9 @@ export const BillingManager: React.FC = () => {
         billingBasis: newBasis,
         unit: newUnit,
         quantity: newQty,
+        totalPages: newBasis === 'book' ? item.totalPages ?? 0 : item.totalPages,
+        blackPages: newBasis === 'book' ? item.blackPages ?? 0 : item.blackPages,
+        colorPages: newBasis === 'book' ? item.colorPages ?? 0 : item.colorPages,
         amount: Math.round(newQty * item.rate * 100) / 100,
       };
       return next;
@@ -293,7 +412,7 @@ export const BillingManager: React.FC = () => {
     if (isReadOnly) return;
     setFormError('');
     if (!selectedParty || customItems.length === 0) {
-      setFormError('অনুগ্রহ করে অন্তত একটি প্রডাকশন কাজ নির্বাচন করুন');
+      setFormError('অনুগ্রহ করে অন্তত একটি প্রডাকশন কাজ বা বই বিল আইটেম যোগ করুন');
       return;
     }
 
@@ -404,8 +523,35 @@ export const BillingManager: React.FC = () => {
               {selectedInvoice.items.map((item, idx) => {
                 const prod = item.productionId ? db.productions.find((p) => p.id === item.productionId) : null;
                 const workDate = item.productionDate || prod?.date;
-                const isPlate = item.billingBasis === 'plate' || (!item.billingBasis && (item.copies || 0) <= 2000);
-                const unitLabel = item.unit || (isPlate ? 'প্লেট' : 'রিম');
+                const resolvedBasis: BillingBasis =
+                  item.billingBasis || ((item.copies || 0) <= 2000 ? 'plate' : 'ream');
+                const unitLabel =
+                  item.unit ||
+                  (resolvedBasis === 'book'
+                    ? 'পিস'
+                    : resolvedBasis === 'forma'
+                    ? 'ফর্মা'
+                    : resolvedBasis === 'plate'
+                    ? 'প্লেট'
+                    : 'রিম');
+
+                const badgeClasses =
+                  resolvedBasis === 'book'
+                    ? 'bg-indigo-50 text-indigo-900 border-indigo-300'
+                    : resolvedBasis === 'forma'
+                    ? 'bg-teal-50 text-teal-900 border-teal-300'
+                    : resolvedBasis === 'plate'
+                    ? 'bg-amber-50 text-amber-900 border-amber-300'
+                    : 'bg-blue-50 text-blue-900 border-blue-300';
+
+                const badgeText =
+                  resolvedBasis === 'book'
+                    ? '★ বই হিসেবে দর (পিস)'
+                    : resolvedBasis === 'forma'
+                    ? '★ ফর্মা হিসেবে দর'
+                    : resolvedBasis === 'plate'
+                    ? '★ প্লেট হিসেবে দর (≤২,০০০ কপি)'
+                    : '★ রিম হিসেবে দর (>২,০০০ কপি)';
 
                 return (
                   <tr key={idx}>
@@ -416,20 +562,31 @@ export const BillingManager: React.FC = () => {
                     <td className="p-3">
                       <p className="font-bold text-slate-900">{item.bookName}</p>
                       <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                        <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold border ${
-                          isPlate
-                            ? 'bg-amber-50 text-amber-900 border-amber-300'
-                            : 'bg-blue-50 text-blue-900 border-blue-300'
-                        }`}>
-                          {isPlate ? '★ প্লেট হিসেবে দর (≤২,০০০ কপি)' : '★ রিম হিসেবে দর (>২,০০০ কপি)'}
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold border ${badgeClasses}`}>
+                          {badgeText}
                         </span>
                         {item.description && <span className="text-[10px] text-slate-500">{item.description}</span>}
                       </div>
                     </td>
-                    <td className="p-3 text-center tabular-nums">{formatNumber(item.forma, lang, numFmt)}</td>
                     <td className="p-3 text-center tabular-nums">
-                      <span className="font-semibold">{formatNumber(item.copies, lang, numFmt)} কপি</span>
-                      {item.reams ? <span className="text-slate-500 text-[10px] block">({formatNumber(item.reams, lang, numFmt)} রিম)</span> : null}
+                      {item.forma ? formatNumber(item.forma, lang, numFmt) : '-'}
+                    </td>
+                    <td className="p-3 text-center tabular-nums">
+                      {resolvedBasis === 'book' ? (
+                        <div className="space-y-0.5">
+                          <span className="font-semibold block">{formatNumber(item.quantity, lang, numFmt)} পিস বই</span>
+                          {(item.totalPages !== undefined || item.blackPages !== undefined || item.colorPages !== undefined) && (
+                            <span className="text-[10px] text-slate-600 block">
+                              মোট পৃষ্ঠা: {formatNumber(item.totalPages || 0, lang, numFmt)} | কালো: {formatNumber(item.blackPages || 0, lang, numFmt)} | রঙিন: {formatNumber(item.colorPages || 0, lang, numFmt)}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          <span className="font-semibold">{formatNumber(item.copies, lang, numFmt)} কপি</span>
+                          {item.reams ? <span className="text-slate-500 text-[10px] block">({formatNumber(item.reams, lang, numFmt)} রিম)</span> : null}
+                        </>
+                      )}
                     </td>
                     <td className="p-3 text-center font-bold tabular-nums">
                       {formatNumber(item.quantity, lang, numFmt)} <span className="text-[10px] font-semibold text-slate-600">{unitLabel}</span>
@@ -913,49 +1070,259 @@ export const BillingManager: React.FC = () => {
                 );
               })()}
 
+              {/* Book-Wise Billing Section (বই হিসেবে বিল করার অপশন) */}
+              <div className="border border-indigo-200 rounded-xl p-3 bg-indigo-50/40 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center space-x-2">
+                    <BookOpen className="w-4 h-4 text-indigo-700 shrink-0" />
+                    <div>
+                      <h4 className="text-xs font-bold text-indigo-950">বই হিসেবে বিল যোগ করুন (পিস × দর)</h4>
+                      <p className="text-[10px] text-indigo-700">
+                        মোট বই (পিস), মোট পৃষ্ঠা, কালো পৃষ্ঠা, রঙিন পৃষ্ঠা ও প্রতি পিস বইয়ের দর দিয়ে সরাসরি বিল তৈরি করুন
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsBookBillExpanded((prev) => !prev)}
+                    className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-indigo-700 hover:bg-indigo-800 text-white transition shrink-0 shadow-2xs"
+                  >
+                    {isBookBillExpanded ? 'বন্ধ করুন' : '+ বই হিসেবে বিল যোগ করুন'}
+                  </button>
+                </div>
+
+                {isBookBillExpanded && (
+                  <div className="bg-white p-3 rounded-xl border border-indigo-200 space-y-3 text-xs animate-in fade-in duration-150">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">তালিকা থেকে বই বাছুন (ঐচ্ছিক)</label>
+                        <select
+                          value={bookBillBookId}
+                          onChange={(e) => {
+                            const bId = e.target.value;
+                            setBookBillBookId(bId);
+                            const found = db.books.find((b) => b.id === bId);
+                            if (found) {
+                              setBookBillName(found.name);
+                              if (found.defaultRate && !bookBillRate) {
+                                setBookBillRate(found.defaultRate);
+                              }
+                            }
+                          }}
+                          className="w-full border rounded-lg p-2 text-xs font-bold text-slate-800 bg-white"
+                        >
+                          <option value="">-- বই বাছুন বা পাশে নাম লিখুন --</option>
+                          {db.books
+                            .filter((b) => !selectedPartyId || !b.partyIds?.length || b.partyIds.includes(selectedPartyId))
+                            .map((b) => (
+                              <option key={b.id} value={b.id}>
+                                {b.name}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">বইয়ের নাম *</label>
+                        <input
+                          type="text"
+                          value={bookBillName}
+                          onChange={(e) => setBookBillName(e.target.value)}
+                          placeholder="যেমন: আদর্শ বাংলা ব্যাকরণ"
+                          className="w-full border rounded-lg p-2 text-xs font-bold text-slate-900"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">কাজের তারিখ</label>
+                        <input
+                          type="date"
+                          value={bookBillDate}
+                          onChange={(e) => setBookBillDate(e.target.value)}
+                          className="w-full border rounded-lg p-2 text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                      <div>
+                        <label className="block text-[11px] font-bold text-indigo-900 mb-1">মোট বই কতটি (পিস) *</label>
+                        <SmartNumberInput
+                          min={0}
+                          integer
+                          value={bookBillPieces}
+                          onValueChange={setBookBillPieces}
+                          className="w-full border border-indigo-300 rounded-lg p-2 text-xs font-black text-indigo-950 bg-indigo-50/30 text-center"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">মোট পৃষ্ঠা কতটি</label>
+                        <SmartNumberInput
+                          min={0}
+                          integer
+                          value={bookBillTotalPages}
+                          onValueChange={setBookBillTotalPages}
+                          className="w-full border rounded-lg p-2 text-xs font-bold text-slate-900 text-center"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">কালো কতটি (পৃষ্ঠা)</label>
+                        <SmartNumberInput
+                          min={0}
+                          integer
+                          value={bookBillBlackPages}
+                          onValueChange={setBookBillBlackPages}
+                          className="w-full border rounded-lg p-2 text-xs font-bold text-slate-900 text-center"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">রঙিন কতটি (পৃষ্ঠা)</label>
+                        <SmartNumberInput
+                          min={0}
+                          integer
+                          value={bookBillColorPages}
+                          onValueChange={setBookBillColorPages}
+                          className="w-full border rounded-lg p-2 text-xs font-bold text-rose-700 text-center"
+                        />
+                      </div>
+                      <div className="col-span-2 sm:col-span-1">
+                        <label className="block text-[11px] font-bold text-emerald-800 mb-1">প্রতি পিস বইয়ের দর (৳) *</label>
+                        <SmartNumberInput
+                          min={0}
+                          value={bookBillRate}
+                          onValueChange={setBookBillRate}
+                          className="w-full border border-emerald-300 rounded-lg p-2 text-xs font-black text-emerald-900 bg-emerald-50/30 text-center"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                      <input
+                        type="text"
+                        value={bookBillNotes}
+                        onChange={(e) => setBookBillNotes(e.target.value)}
+                        placeholder="অতিরিক্ত বিবরণ (যেমন: বাইন্ডিং/মলাট সহ) - ঐচ্ছিক"
+                        className="flex-1 border rounded-lg p-1.5 text-xs"
+                      />
+                      <div className="flex items-center justify-between sm:justify-end gap-3">
+                        <span className="text-xs font-bold text-slate-700 tabular-nums">
+                          হিসাব: {formatNumber(bookBillPieces || 0, lang, numFmt)} পিস × {formatCurrency(bookBillRate || 0, lang)} ={' '}
+                          <b className="text-indigo-800">{formatCurrency((bookBillPieces || 0) * (bookBillRate || 0), lang)}</b>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleAddBookBillItem}
+                          className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white rounded-lg text-xs font-bold flex items-center space-x-1 shrink-0"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>বিলে যোগ করুন</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Editable Rate and Items */}
               {customItems.length > 0 && (
                 <div className="border rounded-xl p-3 bg-white space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-1 pb-1">
                     <h4 className="text-xs font-bold text-slate-800">নির্বাচিত আইটেমের দর ও পরিমাণ নির্ধারণ</h4>
                     <span className="text-[10px] text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-bold">
-                      স্বয়ংক্রিয় নিয়ম: ২০০০ কপি বা নিচে = প্লেট হিসেবে দর, ২০০০ কপির উপরে = রিম হিসেবে দর
+                      স্বয়ংক্রিয় নিয়ম: ২০০০ কপি বা নিচে = প্লেট, উপরে = রিম | অথবা ফর্মা / বই (পিস) হিসেবে বিল
                     </span>
                   </div>
 
                   <div className="space-y-2.5">
                     {customItems.map((item, idx) => {
-                      const isPlate = item.billingBasis === 'plate' || (!item.billingBasis && (item.copies || 0) <= 2000);
-                      const unitLabel = item.unit || (isPlate ? 'প্লেট' : 'রিম');
+                      const resolvedBasis: BillingBasis =
+                        item.billingBasis || ((item.copies || 0) <= 2000 ? 'plate' : 'ream');
+                      const unitLabel =
+                        item.unit ||
+                        (resolvedBasis === 'book'
+                          ? 'পিস'
+                          : resolvedBasis === 'forma'
+                          ? 'ফর্মা'
+                          : resolvedBasis === 'plate'
+                          ? 'প্লেট'
+                          : 'রিম');
 
                       return (
                         <div key={item.id} className="p-2.5 rounded-xl border border-slate-200 bg-slate-50 space-y-2 text-xs">
                           <div className="flex flex-wrap items-center justify-between gap-1.5 pb-1 border-b border-slate-200/60">
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center flex-wrap gap-1.5">
                               <span className="font-bold text-slate-900">{item.bookName}</span>
-                              <span className="text-[10px] text-slate-500 tabular-nums">
-                                (ছাপা: {formatNumber(item.copies, lang, numFmt)} কপি | {formatNumber(item.forma, lang, numFmt)} ফর্মা | {formatNumber(item.plates, lang, numFmt)} প্লেট | {formatNumber(item.reams, lang, numFmt)} রিম)
-                              </span>
+                              {resolvedBasis === 'book' ? (
+                                <span className="text-[10px] text-indigo-700 font-semibold tabular-nums">
+                                  (মোট বই: {formatNumber(item.quantity, lang, numFmt)} পিস | পৃষ্ঠা: {formatNumber(item.totalPages || 0, lang, numFmt)}, কালো: {formatNumber(item.blackPages || 0, lang, numFmt)}, রঙিন: {formatNumber(item.colorPages || 0, lang, numFmt)})
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-slate-500 tabular-nums">
+                                  (ছাপা: {formatNumber(item.copies, lang, numFmt)} কপি | {formatNumber(item.forma, lang, numFmt)} ফর্মা | {formatNumber(item.plates, lang, numFmt)} প্লেট | {formatNumber(item.reams, lang, numFmt)} রিম)
+                                </span>
+                              )}
                             </div>
 
                             <div className="flex items-center space-x-1.5">
                               <label className="text-[10px] font-bold text-slate-500">দর ধরার নিয়ম:</label>
                               <select
-                                value={item.billingBasis || (isPlate ? 'plate' : 'ream')}
+                                value={resolvedBasis}
                                 onChange={(e) => handleBasisChange(idx, e.target.value as BillingBasis)}
                                 className="text-[11px] font-bold border rounded-lg px-2 py-0.5 bg-white text-slate-800 cursor-pointer shadow-2xs"
                               >
                                 <option value="plate">প্লেট হিসেবে (দর/প্লেট)</option>
                                 <option value="ream">রিম হিসেবে (দর/রিম)</option>
                                 <option value="forma">ফর্মা হিসেবে (দর/ফর্মা)</option>
+                                <option value="book">বই হিসেবে (দর/পিস বই)</option>
                               </select>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveCustomItem(idx)}
+                                className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                                title="আইটেম বাদ দিন"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           </div>
+
+                          {resolvedBasis === 'book' && (
+                            <div className="grid grid-cols-3 gap-2 bg-indigo-50/50 p-2 rounded-lg border border-indigo-100">
+                              <div>
+                                <label className="text-[10px] font-bold text-indigo-900 block mb-0.5">মোট পৃষ্ঠা কতটি:</label>
+                                <SmartNumberInput
+                                  min={0}
+                                  integer
+                                  value={item.totalPages ?? 0}
+                                  onValueChange={(v) => handleBookMetaChange(idx, 'totalPages', v)}
+                                  className="w-full border rounded p-1 text-center font-bold bg-white text-slate-900 text-xs"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] font-bold text-slate-700 block mb-0.5">কালো কতটি:</label>
+                                <SmartNumberInput
+                                  min={0}
+                                  integer
+                                  value={item.blackPages ?? 0}
+                                  onValueChange={(v) => handleBookMetaChange(idx, 'blackPages', v)}
+                                  className="w-full border rounded p-1 text-center font-bold bg-white text-slate-900 text-xs"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] font-bold text-rose-700 block mb-0.5">রঙিন কতটি:</label>
+                                <SmartNumberInput
+                                  min={0}
+                                  integer
+                                  value={item.colorPages ?? 0}
+                                  onValueChange={(v) => handleBookMetaChange(idx, 'colorPages', v)}
+                                  className="w-full border rounded p-1 text-center font-bold bg-white text-rose-700 text-xs"
+                                />
+                              </div>
+                            </div>
+                          )}
 
                           <div className="grid grid-cols-12 gap-2 items-center">
                             <div className="col-span-4">
                               <label className="text-[10px] text-slate-500 block mb-0.5">
-                                বিলিং পরিমাণ ({unitLabel}):
+                                {resolvedBasis === 'book' ? 'মোট বই (পিস):' : `বিলিং পরিমাণ (${unitLabel}):`}
                               </label>
                               <div className="relative">
                                 <SmartNumberInput

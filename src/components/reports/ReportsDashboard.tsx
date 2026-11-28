@@ -338,8 +338,8 @@ export const ReportsDashboard: React.FC = () => {
         <PrintHeader
           title={
             printMode === 'all'
-              ? `${db.settings.name || 'Press Business Management'} - সর্বাঙ্গীন ব্যবসায়িক অডিট ও পূর্ণাঙ্গ হিসাব রিপোর্ট`
-              : `${db.settings.name || 'Press Business Management'} - ${
+              ? `${db.settings.name || 'Press Management'} - সর্বাঙ্গীন ব্যবসায়িক অডিট ও পূর্ণাঙ্গ হিসাব রিপোর্ট`
+              : `${db.settings.name || 'Press Management'} - ${
                   reportType === 'general'
                     ? 'সার্বিক আর্থিক সারসংক্ষেপ'
                     : reportType === 'party'
@@ -749,7 +749,13 @@ export const ReportsDashboard: React.FC = () => {
                       <td className="p-3 text-center font-black">{plt.plateCount}</td>
                       <td className="p-3 text-center">
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800">
-                          {plt.location === 'press' ? 'প্রেস' : plt.location === 'godown' ? 'গোডাউন' : plt.location === 'sold' ? 'বিক্রি' : 'ফেরত'}
+                          {plt.location === 'press'
+                            ? 'প্রেস'
+                            : plt.location === 'godown'
+                            ? `${plt.godownName || 'গোডাউন-১'}${plt.lotNo ? ` (${plt.lotNo})` : ''}`
+                            : plt.location === 'sold'
+                            ? 'বিক্রি'
+                            : 'ফেরত'}
                         </span>
                       </td>
                       <td className="p-3 text-slate-600">

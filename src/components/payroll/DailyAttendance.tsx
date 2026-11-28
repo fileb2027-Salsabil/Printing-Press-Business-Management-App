@@ -795,7 +795,7 @@ export const DailyAttendance: React.FC = () => {
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  {[0, 1, 2, 3, 4, 5, 6].map((h) => (
+                  {Array.from({ length: 21 }, (_, h) => h).map((h) => (
                     <button
                       type="button"
                       key={h}
@@ -1002,8 +1002,8 @@ export const DailyAttendance: React.FC = () => {
                   />
                 </div>
                 <div className="col-span-2 flex flex-wrap gap-1.5 pt-1 border-t">
-                  <span className="text-[11px] text-slate-500 font-semibold self-center mr-1">দ্রুত ঘণ্টা নির্বাচন:</span>
-                  {[0, 1, 2, 3, 4, 5, 6].map((h) => (
+                  <span className="text-[11px] text-slate-500 font-semibold self-center mr-1">দ্রুত ঘণ্টা নির্বাচন (০–২০):</span>
+                  {Array.from({ length: 21 }, (_, h) => h).map((h) => (
                     <button
                       type="button"
                       key={h}

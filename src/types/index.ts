@@ -157,7 +157,7 @@ export interface OrderSlip {
   updatedAt: string;
 }
 
-export type BillingBasis = 'plate' | 'ream' | 'forma';
+export type BillingBasis = 'plate' | 'ream' | 'forma' | 'book';
 
 export interface InvoiceItem {
   id: string;
@@ -170,9 +170,12 @@ export interface InvoiceItem {
   plates: number;
   copies: number;
   reams: number;
+  totalPages?: number; // মোট পৃষ্ঠা (বই হিসেবে বিলের জন্য)
+  blackPages?: number; // কালো পৃষ্ঠা (বই হিসেবে বিলের জন্য)
+  colorPages?: number; // রঙিন পৃষ্ঠা (বই হিসেবে বিলের জন্য)
   quantity: number;
-  billingBasis?: BillingBasis; // 'plate' (≤২০০০ কপি: দর × প্লেট) অথবা 'ream' (>২০০০ কপি: দর × রিম)
-  unit?: string; // 'প্লেট' | 'রিম' | 'ফর্মা'
+  billingBasis?: BillingBasis; // 'plate' | 'ream' | 'forma' | 'book'
+  unit?: string; // 'প্লেট' | 'রিম' | 'ফর্মা' | 'পিস'
   rate: number;
   amount: number;
   description?: string;
@@ -400,6 +403,7 @@ export interface PlateRecord {
   partyName: string;
   bookId?: string;
   bookName: string;
+  godownName?: string; // গোডাউন-১ অথবা গোডাউন-২
   lotNo?: string; // কত নম্বর লটে আছে (গোডাউনে থাকলে)
   plateCount: number;
   size: string; // যেমন: ২৩×৩৬, ২০×৩০

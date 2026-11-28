@@ -397,7 +397,7 @@ const AppContent: React.FC = () => {
       <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white text-sm p-4">
         <div className="flex flex-col items-center space-y-3 text-center">
           <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="font-bold text-base">Press Business Management & Accounting প্রস্তুত হচ্ছে...</p>
+          <p className="font-bold text-base">Press Management — প্রেস ম্যানেজমেন্ট প্রস্তুত হচ্ছে...</p>
           <p className="text-xs text-emerald-400 font-semibold">
             {currentUser && isCloudHydrating
               ? 'ক্লাউড ডাটা ও দোকানের তথ্য লোড হচ্ছে...'

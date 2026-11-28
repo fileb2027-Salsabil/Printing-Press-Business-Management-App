@@ -84,7 +84,7 @@ export const SetupWizard: React.FC = () => {
             <Building2 className="w-8 h-8 text-emerald-300" />
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-            {form.name ? `${form.name} — ` : ''}Press Business Management & Accounting
+            {form.name ? `${form.name} — ` : ''}Press Management — প্রেস ম্যানেজমেন্ট
           </h1>
           <p className="text-emerald-200 text-sm mt-1">
             Designed by MD. Salsabil • প্রাথমিক সেটআপ উইজার্ড

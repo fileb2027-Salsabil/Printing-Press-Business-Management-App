@@ -53,7 +53,7 @@ export const DataManagement: React.FC = () => {
     storageStats,
     isReadOnly,
   } = useDatabase();
-  const activeShopName = db.settings.name || 'Press Business Management';
+  const activeShopName = db.settings.name || 'Press Management';
   const lang = db.settings.language;
   const t = translations[lang];
 
@@ -129,7 +129,7 @@ export const DataManagement: React.FC = () => {
       try {
         await navigator.share({
           title: `${activeShopName} - অনলাইন ক্লাউড ব্যাকআপ`,
-          text: `${activeShopName} (Press Business Management) - তারিখ: ${dateStr}। এই ব্যাকআপ ফাইলটি গুগল ড্রাইভ (Google Drive) অথবা ইমেইলে সুরক্ষিত রাখুন।`,
+          text: `${activeShopName} (Press Management — প্রেস ম্যানেজমেন্ট) - তারিখ: ${dateStr}। এই ব্যাকআপ ফাইলটি গুগল ড্রাইভ (Google Drive) অথবা ইমেইলে সুরক্ষিত রাখুন।`,
           files: [file],
         });
         setShareMessage('ক্লাউড ব্যাকআপ সফলভাবে শেয়ার বা ড্রাইভে প্রেরণ করা হয়েছে!');

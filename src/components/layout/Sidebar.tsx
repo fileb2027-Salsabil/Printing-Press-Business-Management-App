@@ -198,7 +198,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="p-3 border-t border-slate-800 text-[11px] text-slate-500 flex items-center justify-between">
           <div className="truncate w-full">
             <p className="text-slate-300 font-bold truncate">{db.settings.name}</p>
-            <p className="text-[10px] text-slate-400 truncate">Press Business Management & Accounting</p>
+            <p className="text-[10px] text-slate-400 truncate">Press Management — প্রেস ম্যানেজমেন্ট</p>
             <p className="text-[10px] text-emerald-400 font-semibold truncate">Designed by MD. Salsabil</p>
           </div>
         </div>

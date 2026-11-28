@@ -240,7 +240,7 @@ export const AuthGatewayScreen: React.FC = () => {
           <Printer className="w-8 h-8" />
         </div>
         <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-          Press Business Management & Accounting
+          Press Management — প্রেস ম্যানেজমেন্ট
         </h1>
         <p className="text-xs sm:text-sm text-emerald-300 font-medium">
           প্রিন্টিং প্রেস, প্রকাশনী ও প্রোডাকশন ক্লাউড হিসাব ব্যবস্থাপনা
@@ -765,7 +765,7 @@ export const AuthGatewayScreen: React.FC = () => {
           🔒 সুরক্ষিত প্রেস ডেটাবেজ। নতুন ব্যবসা নিবন্ধন বা স্টাফ এক্সেস মেইন অ্যাডমিন অনুমোদনের পর সম্পূর্ণ সচল হয়।
         </p>
         <p className="text-[11px] text-emerald-400/90 font-semibold">
-          Press Business Management & Accounting • Designed by MD. Salsabil
+          Press Management — প্রেস ম্যানেজমেন্ট • Designed by MD. Salsabil
         </p>
       </div>
     </div>

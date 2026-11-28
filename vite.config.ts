@@ -46,9 +46,9 @@ export default defineConfig(() => {
         includeAssets: ['apple-touch-icon.png', 'icon.svg'],
         manifest: {
           id: '/',
-          name: 'মক্কা প্রিন্টার্স - প্রেস ম্যানেজমেন্ট',
-          short_name: 'মক্কা প্রেস',
-          description: 'মক্কা প্রিন্টার্সের অফলাইন ও অনলাইন ক্লাউড ব্যাকআপ সহ সম্পূর্ণ প্রেস হিসাব সফটওয়্যার',
+          name: 'Press Management — প্রেস ম্যানেজমেন্ট',
+          short_name: 'Press Mgmt',
+          description: 'Press Management — প্রেস ম্যানেজমেন্ট | অফলাইন ও অনলাইন ক্লাউড ব্যাকআপ সহ সম্পূর্ণ প্রেস হিসাব সফটওয়্যার',
           theme_color: '#047857',
           background_color: '#047857',
           display: 'standalone',

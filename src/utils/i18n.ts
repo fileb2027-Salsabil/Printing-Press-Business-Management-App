@@ -1,7 +1,7 @@
 export const translations = {
   bn: {
-    appName: 'Press Business Management & Accounting',
-    appSubtitle: 'Press Business Management & Accounting • Designed by MD. Salsabil',
+    appName: 'Press Management — প্রেস ম্যানেজমেন্ট',
+    appSubtitle: 'Press Management — প্রেস ম্যানেজমেন্ট • Designed by MD. Salsabil',
     
     // Navigation
     navDashboard: 'হোম / ড্যাশবোর্ড',
@@ -198,7 +198,7 @@ export const translations = {
 
     // Settings & Setup
     settingsTitle: 'প্রতিষ্ঠানের সেটিংস ও কনফিগারেশন',
-    setupWizardTitle: 'মক্কা প্রিন্টার্স - প্রাথমিক সেটআপ উইজার্ড',
+    setupWizardTitle: 'Press Management — প্রেস ম্যানেজমেন্ট - প্রাথমিক সেটআপ উইজার্ড',
     companyInfo: 'প্রতিষ্ঠানের সাধারণ তথ্য',
     ownerDetails: 'মালিকের বিস্তারিত তথ্য',
     managerDetails: 'পরিচালক / ম্যানেজারের তথ্য',
@@ -208,8 +208,8 @@ export const translations = {
     securityPin: 'অ্যাডমিন পিন / পাসওয়ার্ড',
   },
   en: {
-    appName: 'Press Business Management & Accounting',
-    appSubtitle: 'Press Business Management & Accounting • Designed by MD. Salsabil',
+    appName: 'Press Management — প্রেস ম্যানেজমেন্ট',
+    appSubtitle: 'Press Management — প্রেস ম্যানেজমেন্ট • Designed by MD. Salsabil',
     
     // Navigation
     navDashboard: 'Dashboard',

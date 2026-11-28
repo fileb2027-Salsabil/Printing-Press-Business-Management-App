@@ -1048,8 +1048,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setActiveNumberFormat(db.settings.numberFormat || 'bn');
     const pressLabel = db.settings.name?.trim();
     document.title = pressLabel
-      ? `${pressLabel} — Press Business Management & Accounting`
-      : 'Press Business Management & Accounting | Designed by MD. Salsabil';
+      ? `${pressLabel} — Press Management (প্রেস ম্যানেজমেন্ট)`
+      : 'Press Management — প্রেস ম্যানেজমেন্ট | Designed by MD. Salsabil';
   }, [db.settings.theme, db.settings.numberFormat, db.settings.name]);
 
   // Auto-route newly logged-in shop owners, approved staff, or party portal users straight to their registered business
